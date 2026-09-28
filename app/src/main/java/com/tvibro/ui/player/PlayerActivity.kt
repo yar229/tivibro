@@ -101,6 +101,7 @@ class PlayerActivity : AppCompatActivity() {
     private val main = Handler(Looper.getMainLooper())
 
     private var channel: Channel? = null
+    private var requestedChannelId: Long = -1L
     private var playlist: Playlist? = null
     private var program: Program? = null
     private var channelIds: LongArray = LongArray(0)
@@ -265,6 +266,8 @@ sideChannelsList = findViewById(R.id.side_channels_list)
     private fun loadChannel(channelId: Long, fromStart: Boolean = false) {
         isSwitching = true
         bufferingView.visible(true)
+        requestedChannelId = channelId
+        sideChannelAdapter.setSelected(channelId)
         executor.execute {
             val ch = repo.channel(channelId)
             val pl = ch?.let { repo.playlist(it.playlistId) }
@@ -655,8 +658,10 @@ sideChannelsList = findViewById(R.id.side_channels_list)
         hidePanels()
         infoPanel.visible(false)
         sideContainer.visible(true)
+        val currentChannelId = channel?.id ?: requestedChannelId
+        sideChannelAdapter.setSelected(currentChannelId)
         sideChannelsList.post {
-            val index = sideChannelAdapter.indexOf(channel?.id ?: -1)
+            val index = sideChannelAdapter.indexOf(currentChannelId)
             val target = if (index >= 0) index else 0
             sideChannelsList.scrollToPosition(target)
             sideChannelsList.post {

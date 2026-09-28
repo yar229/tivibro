@@ -19,10 +19,20 @@ class SideChannelAdapter(
 
     private var items: List<Channel> = emptyList()
     private var programs: Map<Long, ProgramInfo> = emptyMap()
+    private var selectedId: Long = -1L
 
     fun submit(newItems: List<Channel>) {
         items = newItems
         notifyDataSetChanged()
+    }
+
+    fun setSelected(channelId: Long) {
+        if (selectedId == channelId) return
+        val previous = items.indexOfFirst { it.id == selectedId }
+        selectedId = channelId
+        val current = items.indexOfFirst { it.id == channelId }
+        if (previous >= 0) notifyItemChanged(previous)
+        if (current >= 0) notifyItemChanged(current)
     }
 
     fun updatePrograms(newPrograms: Map<Long, ProgramInfo>) {
@@ -57,6 +67,7 @@ class SideChannelAdapter(
         } else {
             holder.logo.setImageResource(R.drawable.ic_logo_channel)
         }
+        holder.itemView.isSelected = channel.id == selectedId
         holder.itemView.setOnClickListener { onClick(channel) }
         holder.itemView.setOnFocusChangeListener { _, hasFocus ->
             if (hasFocus) onFocus?.invoke(channel)
