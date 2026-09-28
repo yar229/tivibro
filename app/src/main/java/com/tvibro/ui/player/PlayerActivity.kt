@@ -116,6 +116,24 @@ private var watchTimeMs = 0L
     private var sleepTimerAt = 0L
     private var hidden = false
     private var isSwitching = false
+    private var bufferingChannelId: Long = -1L
+
+    // Playback readiness is the only reliable "switching finished" signal, and it does not
+    // always arrive when channels are switched quickly: the engine may already have reported
+    // ready for the previous channel and never report again for the new one. The label would
+    // then stay on screen forever, so every buffering indicator is also bounded by a timeout.
+    private val clearBuffering: Runnable = Runnable {
+        bufferingChannelId = -1L
+        bufferingView.visible(false)
+        showMessage(null)
+    }
+
+    private fun armBufferingTimeout(channelId: Long) {
+        bufferingChannelId = channelId
+        main.removeCallbacks(clearBuffering)
+        main.postDelayed(clearBuffering, BUFFERING_TIMEOUT_MS)
+    }
+
     private val audioManager by lazy { getSystemService(Context.AUDIO_SERVICE) as AudioManager }
     private var audioFocusRequest: AudioFocusRequest? = null
     private val audioFocusListener = AudioManager.OnAudioFocusChangeListener { focusChange ->
@@ -154,6 +172,7 @@ private var watchTimeMs = 0L
 
     override fun onDestroy() {
         super.onDestroy()
+        main.removeCallbacks(clearBuffering)
         saveWatchTime()
         if (::engine.isInitialized) engine.release()
         executor.shutdownNow()
@@ -267,7 +286,9 @@ sideChannelsList = findViewById(R.id.side_channels_list)
 
     private fun loadChannel(channelId: Long, fromStart: Boolean = false) {
         isSwitching = true
+        clearBuffering.run()
         bufferingView.visible(true)
+        armBufferingTimeout(channelId)
         requestedChannelId = channelId
         sideChannelAdapter.setSelected(channelId)
         executor.execute {
@@ -391,16 +412,18 @@ sideChannelsList = findViewById(R.id.side_channels_list)
     private fun wireEngine() {
         engine.onReady = {
             main.post {
-                bufferingView.visible(false)
-                showMessage(null)
+                clearBuffering.run()
             }
         }
         engine.onBuffering = { buffering ->
-            main.post { bufferingView.visible(buffering) }
+            main.post {
+                bufferingView.visible(buffering)
+                if (buffering && bufferingChannelId >= 0) armBufferingTimeout(bufferingChannelId)
+            }
         }
         engine.onError = { error ->
             main.post {
-                bufferingView.visible(false)
+                clearBuffering.run()
                 if (error == "Audio codec not supported" && exoEngine != null) {
                     Log.d("TvibroPlayer", "audio codec unsupported, falling back to VLC")
                     tryVlcFallback()
@@ -411,7 +434,10 @@ sideChannelsList = findViewById(R.id.side_channels_list)
             }
         }
         engine.onEnd = {
-            main.post { nextChannel() }
+            main.post {
+                clearBuffering.run()
+                nextChannel()
+            }
         }
         engine.onVideoSize = { _, height ->
             main.post {
@@ -547,6 +573,7 @@ sideChannelsList = findViewById(R.id.side_channels_list)
         }
         if (prefs.showBlackScreen) {
             showMessage(getString(R.string.stream_buffering))
+            armBufferingTimeout(ch.id)
         }
 
         val channelId = ch.id
@@ -1258,6 +1285,9 @@ sideChannelsList = findViewById(R.id.side_channels_list)
         const val EXTRA_CHANNEL_INDEX = "channel_index"
         const val EXTRA_STAY_ON_LIST = "stay_on_list"
         const val EXTRA_CATEGORY_INDEX = "category_index"
+
+        /** Upper bound for the buffering spinner and label, so neither can get stuck. */
+        const val BUFFERING_TIMEOUT_MS = 15_000L
     }
 }
 
