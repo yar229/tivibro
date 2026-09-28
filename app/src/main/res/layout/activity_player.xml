@@ -26,7 +26,9 @@
             android:background="@drawable/bg_side_channels"
             android:paddingTop="@dimen/header_height"
             android:paddingBottom="@dimen/spacing_lg"
-            android:scrollbars="none" />
+            android:scrollbars="none"
+            android:focusable="true"
+            android:focusableInTouchMode="true" />
 
         <LinearLayout
             android:id="@+id/side_program_details"
