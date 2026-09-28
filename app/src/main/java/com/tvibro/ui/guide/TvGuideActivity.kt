@@ -33,6 +33,12 @@ class TvGuideActivity : AppCompatActivity() {
     private lateinit var daysAdapter: DaysAdapter
     private lateinit var nowLine: View
     private lateinit var statusView: TextView
+    private lateinit var channelsList: RecyclerView
+    private lateinit var programsList: RecyclerView
+
+    private var syncingRows = false
+    private var lastSyncPosition = RecyclerView.NO_POSITION
+    private var lastSyncTop = 0
 
     private val executor = Executors.newSingleThreadExecutor { r -> Thread(r, "tvibro-guide").apply { isDaemon = true } }
     private var channels: List<Channel> = emptyList()
@@ -60,7 +66,8 @@ class TvGuideActivity : AppCompatActivity() {
             onClick = { position -> playChannel(position) },
             onProgramsLongClick = { position -> showProgramMenu(position) }
         )
-        findViewById<RecyclerView>(R.id.channels_list).apply {
+        channelsList = findViewById(R.id.channels_list)
+        channelsList.apply {
             layoutManager = LinearLayoutManager(this@TvGuideActivity)
             adapter = channelsAdapter
         }
@@ -72,10 +79,25 @@ class TvGuideActivity : AppCompatActivity() {
                 playProgram(channel, program)
             }
         )
-        findViewById<RecyclerView>(R.id.programs_rows).apply {
+        programsList = findViewById(R.id.programs_rows)
+        programsList.apply {
             layoutManager = LinearLayoutManager(this@TvGuideActivity)
             adapter = rowsAdapter
         }
+
+        // The channel column and the program grid are two lists with identical items, so they
+        // have to share one vertical scroll position: otherwise a channel ends up next to
+        // somebody else's programs and the grid cannot be read at all.
+        channelsList.addOnScrollListener(object : RecyclerView.OnScrollListener() {
+            override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
+                syncVerticalScroll(channelsList, programsList)
+            }
+        })
+        programsList.addOnScrollListener(object : RecyclerView.OnScrollListener() {
+            override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
+                syncVerticalScroll(programsList, channelsList)
+            }
+        })
 
         dayStart = Fmt.startOfDay(System.currentTimeMillis())
         daysAdapter.submit(Fmt.startOfDay(System.currentTimeMillis()), 7)
@@ -108,6 +130,28 @@ class TvGuideActivity : AppCompatActivity() {
                 positionNowLine()
             }
         }
+    }
+
+    /**
+     * Mirrors the vertical position of [source] onto [target]. Both lists use the same layout
+     * manager and the same item height, so the first visible row and its offset fully describe
+     * the position. The applied position is remembered, which keeps the two scroll listeners
+     * from bouncing the same change back and forth.
+     */
+    private fun syncVerticalScroll(source: RecyclerView, target: RecyclerView) {
+        if (syncingRows) return
+        val sourceLm = source.layoutManager as? LinearLayoutManager ?: return
+        val targetLm = target.layoutManager as? LinearLayoutManager ?: return
+        val first = sourceLm.findFirstVisibleItemPosition()
+        if (first == RecyclerView.NO_POSITION) return
+        val view = source.findViewHolderForAdapterPosition(first)?.itemView ?: return
+        val top = view.top
+        if (first == lastSyncPosition && top == lastSyncTop) return
+        lastSyncPosition = first
+        lastSyncTop = top
+        syncingRows = true
+        targetLm.scrollToPositionWithOffset(first, top)
+        syncingRows = false
     }
 
     private fun selectDay(index: Int) {

@@ -108,6 +108,8 @@ class PlayerActivity : AppCompatActivity() {
     private var currentIndex = 0
     private var navigationIds: LongArray? = null
     private var navigationIdsLoading = false
+    private var sideProgramChannelIds: List<Long> = emptyList()
+    private var lastSideProgramsAt = 0L
     private var panelTimeout = 0L
     private var switchTimeout = 0L
 private var watchStart = 0L
@@ -471,8 +473,12 @@ sideChannelsList = findViewById(R.id.side_channels_list)
                     switchTimeout = 0
                     switchPanel.visibility = View.GONE
                 }
-                if (watchStart > 0 && engine.isPlaying()) watchTimeMs += 1000
-                main.postDelayed(this, 1000L)
+      if (watchStart > 0 && engine.isPlaying()) watchTimeMs += 1000
+      // Keep the EPG progress bars in the channel list moving while it stays open.
+      if (sideChannelsVisible && now - lastSideProgramsAt > SIDE_PROGRAMS_REFRESH_MS) {
+        refreshSidePrograms()
+      }
+      main.postDelayed(this, 1000L)
             }
         }
         main.post(tick)
@@ -493,7 +499,9 @@ sideChannelsList = findViewById(R.id.side_channels_list)
             panelSeek.progress = ((pos * 1000) / dur).toInt().coerceIn(0, 1000)
         } else if (prog != null) {
             val now = System.currentTimeMillis()
-            panelSeek.progress = Fmt.percent(prog.start, prog.stop, now)
+            // panel_seek works on a 0..1000 scale (see the playback branch above), while
+            // Fmt.percent returns 0..100, so the EPG progress has to be scaled to match.
+            panelSeek.progress = (Fmt.percent(prog.start, prog.stop, now) * 10).coerceIn(0, 1000)
         } else {
             panelSeek.progress = 0
         }
@@ -648,6 +656,24 @@ sideChannelsList = findViewById(R.id.side_channels_list)
         }
     }
 
+    private fun refreshSidePrograms() {
+        val ids = sideProgramChannelIds
+        if (ids.isEmpty()) return
+        lastSideProgramsAt = System.currentTimeMillis()
+        executor.execute {
+            val now = System.currentTimeMillis()
+            val programs = ids.mapNotNull { id ->
+                repo.currentProgram(id, now)?.let { prog ->
+                    id to SideChannelAdapter.ProgramInfo(
+                        title = prog.title,
+                        progress = Fmt.percent(prog.start, prog.stop, now),
+                    )
+                }
+            }.toMap()
+            main.post { sideChannelAdapter.updatePrograms(programs) }
+        }
+    }
+
     private fun showSideChannels() {
         if (!::sideContainer.isInitialized) return
         if (sideChannelsVisible) return
@@ -670,18 +696,8 @@ sideChannelsList = findViewById(R.id.side_channels_list)
                     }
                     sideChannelAdapter.submit(channels)
                     sideChannelsLoaded = true
-                    executor.execute {
-                        val now = System.currentTimeMillis()
-                        val programs = channels.mapNotNull { ch ->
-                            repo.currentProgram(ch.id, now)?.let { prog ->
-                                ch.id to SideChannelAdapter.ProgramInfo(
-                                    title = prog.title,
-                                    progress = Fmt.percent(prog.start, prog.stop, now),
-                                )
-                            }
-                        }.toMap()
-                        main.post { sideChannelAdapter.updatePrograms(programs) }
-                    }
+                    sideProgramChannelIds = channels.map { it.id }
+                    refreshSidePrograms()
                     showSideChannels()
                 }
             }
@@ -1288,6 +1304,9 @@ sideChannelsList = findViewById(R.id.side_channels_list)
 
         /** Upper bound for the buffering spinner and label, so neither can get stuck. */
         const val BUFFERING_TIMEOUT_MS = 15_000L
+
+        /** How often the channel list EPG progress is reloaded while the list is open. */
+        const val SIDE_PROGRAMS_REFRESH_MS = 30_000L
     }
 }
 
