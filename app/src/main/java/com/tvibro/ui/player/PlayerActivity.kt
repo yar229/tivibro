@@ -106,6 +106,8 @@ class PlayerActivity : AppCompatActivity() {
     private var program: Program? = null
     private var channelIds: LongArray = LongArray(0)
     private var currentIndex = 0
+    private var navigationIds: LongArray? = null
+    private var navigationIdsLoading = false
     private var panelTimeout = 0L
     private var switchTimeout = 0L
 private var watchStart = 0L
@@ -636,6 +638,9 @@ sideChannelsList = findViewById(R.id.side_channels_list)
                         repo.channelsByIds(channelIds.toList())
                     }
                 main.post {
+                    if (channelIds.isEmpty()) {
+                        navigationIds = channels.map { it.id }.toLongArray()
+                    }
                     sideChannelAdapter.submit(channels)
                     sideChannelsLoaded = true
                     executor.execute {
@@ -949,34 +954,76 @@ sideChannelsList = findViewById(R.id.side_channels_list)
     }
 
     private fun nextChannel() {
-        if (channelIds.isEmpty()) {
-            stopPlayback()
-            return
-        }
-        val next = (currentIndex + 1) % channelIds.size
-        switchTo(currentIndex, next)
+        stepChannel(1)
     }
 
     private fun previousChannel() {
-        if (channelIds.isEmpty()) {
-            stopPlayback()
-            return
-        }
-        val prev = if (currentIndex - 1 < 0) channelIds.size - 1 else currentIndex - 1
-        switchTo(currentIndex, prev)
+        stepChannel(-1)
     }
 
-    private fun switchTo(from: Int, to: Int) {
-        if (channelIds.isEmpty() || to !in channelIds.indices) return
-        if (to == from) return
-        val oldPosition = engine.positionMs()
+    private fun stepChannel(delta: Int) {
+        if (isSwitching) return
+        val known = channelIds.takeIf { it.isNotEmpty() }
+        if (known != null) {
+            val from = currentIndex
+            val to = (from + delta + known.size) % known.size
+            if (to == from) return
+            currentIndex = to
+            switchToChannel(known[to])
+            return
+        }
+        // A direct launch ("turn on last channel") carries only the channel id, with no
+        // playlist order, so navigation falls back to the channel order the side panel shows.
+        withNavigationIds { ids ->
+            if (ids.isEmpty()) {
+                stopPlayback()
+                return@withNavigationIds
+            }
+            val current = channel?.id ?: requestedChannelId
+            val pos = ids.indexOfFirst { it == current }
+            if (pos < 0) return@withNavigationIds
+            val to = (pos + delta + ids.size) % ids.size
+            if (to == pos) return@withNavigationIds
+            currentIndex = to
+            switchToChannel(ids[to])
+        }
+    }
+
+    private fun withNavigationIds(action: (LongArray) -> Unit) {
+        channelIds.takeIf { it.isNotEmpty() }?.let {
+            action(it)
+            return
+        }
+        navigationIds?.let {
+            action(it)
+            return
+        }
+        if (navigationIdsLoading) return
+        navigationIdsLoading = true
+        executor.execute {
+            val playlistIds = repo.playlists(onlyEnabled = true).map { it.id }
+            val ids = repo.channels(
+                playlistIds = playlistIds,
+                group = "",
+                filter = ChannelFilter.TV,
+                sort = "order",
+            ).map { it.id }.toLongArray()
+            main.post {
+                navigationIdsLoading = false
+                navigationIds = ids
+                action(ids)
+            }
+        }
+    }
+
+    private fun switchToChannel(channelId: Long) {
+        if (channelId == (channel?.id ?: requestedChannelId)) return
         saveWatchTime()
-        currentIndex = to
         if (prefs.switchDelay > 0) {
             showMessage(getString(R.string.press_again_to_switch))
-            main.postDelayed({ loadChannel(channelIds[to]) }, prefs.switchDelay * 1000L)
+            main.postDelayed({ loadChannel(channelId) }, prefs.switchDelay * 1000L)
         } else {
-            loadChannel(channelIds[to])
+            loadChannel(channelId)
         }
     }
 
