@@ -49,6 +49,25 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      - name: Configure Gradle properties
+        run: |
+          set -euo pipefail
+
+          # gradle.properties is gitignored on this repo, so CI would run the
+          # Gradle daemon with a tiny default heap. D8 dex-merging this APK
+          # (it bundles VLC/libvlc) needs ~3 GB, matching the local build.
+          cat > gradle.properties <<'EOF'
+          org.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8
+          org.gradle.parallel=true
+          org.gradle.caching=true
+          android.useAndroidX=true
+          android.nonTransitiveRClass=true
+          android.defaults.buildfeatures.buildconfig=true
+          kotlin.code.style=official
+          EOF
+          echo "Wrote gradle.properties:"
+          cat gradle.properties
+
       - name: Decode release keystore
         id: keystore
         env:
@@ -83,12 +102,10 @@ jobs:
           set -euo pipefail
           chmod +x ./gradlew
 
-          # gradle.properties is gitignored, so the required AndroidX flags are
-          # passed explicitly here.
+          # version and keystore are per-build values; the rest of the config
+          # lives in gradle.properties created by the step above.
           ./gradlew :app:assembleRelease \
             --stacktrace \
-            -Pandroid.useAndroidX=true \
-            -Pandroid.nonTransitiveRClass=true \
             -PappVersionName="$APP_VERSION" \
             -PTIVIBRO_STORE_FILE="$STORE_FILE" \
             -PTIVIBRO_STORE_PASSWORD="$STORE_PASSWORD" \
