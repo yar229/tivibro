@@ -188,7 +188,6 @@ private var watchTimeMs = 0L
     override fun onPause() {
         super.onPause()
         window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        // settings sit on top of a transparent panel, so playback must keep running
         if (::engine.isInitialized && !isFinishing && !keepPlayingBehind) engine.pause()
         keepPlayingBehind = false
     }
@@ -716,10 +715,23 @@ sideChannelsList = findViewById(R.id.side_channels_list)
             val index = sideChannelAdapter.indexOf(currentChannelId)
             val target = if (index >= 0) index else 0
             sideChannelsList.scrollToPosition(target)
-            sideChannelsList.post {
-                sideChannelsList.findViewHolderForAdapterPosition(target)?.itemView?.requestFocus()
-                sideChannelAdapter.getChannel(target)?.let { updateSideProgramDetails(it.id) }
+            focusSideChannel(target)
+        }
+    }
+
+    private fun focusSideChannel(position: Int, attemptsLeft: Int = 5) {
+        if (sideChannelsList.hasPendingAdapterUpdates()) {
+            if (attemptsLeft > 0) {
+                sideChannelsList.post { focusSideChannel(position, attemptsLeft - 1) }
             }
+            return
+        }
+        val holder = sideChannelsList.findViewHolderForAdapterPosition(position)
+        if (holder != null) {
+            holder.itemView.requestFocus()
+            sideChannelAdapter.getChannel(position)?.let { updateSideProgramDetails(it.id) }
+        } else if (attemptsLeft > 0) {
+            sideChannelsList.post { focusSideChannel(position, attemptsLeft - 1) }
         }
     }
 
@@ -729,10 +741,6 @@ sideChannelsList = findViewById(R.id.side_channels_list)
         root.requestFocus()
     }
 
-    // Single entry point for picking a channel from the side list. Both the
-    // adapter click and the DPAD_CENTER handler route here, so the list can only
-    // be closed in one place. Safe to call twice for the same channel: the
-    // second call sees it as current and does not reload.
     private fun selectSideChannel(channelId: Long) {
         if (channelId != (channel?.id ?: requestedChannelId)) {
             loadChannel(channelId)
@@ -1020,7 +1028,6 @@ sideChannelsList = findViewById(R.id.side_channels_list)
 
     private fun openSettings() {
         saveWatchTime()
-        // keep the channel playing behind the translucent settings panel
         keepPlayingBehind = true
         startActivitySafely(Intent(this, SettingsActivity::class.java))
     }

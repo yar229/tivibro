@@ -36,8 +36,12 @@ class SideChannelAdapter(
     }
 
     fun updatePrograms(newPrograms: Map<Long, ProgramInfo>) {
+        if (newPrograms == programs) return
+        val previous = programs
         programs = newPrograms
-        notifyDataSetChanged()
+        items.forEachIndexed { index, item ->
+            if (previous[item.id] != newPrograms[item.id]) notifyItemChanged(index)
+        }
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): Holder {
