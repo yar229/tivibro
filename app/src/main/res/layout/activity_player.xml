@@ -58,14 +58,13 @@
                 tools:text="21:05 — 22:45 · осталось 42 мин" />
 
             <TextView
-                android:id="@+id/side_program_description"
-                style="@style/TvBro.Text.Subtitle"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="@dimen/spacing_md"
-                android:ellipsize="end"
-                android:maxLines="4"
-                android:textSize="@dimen/text_sm"
+                    android:id="@+id/side_program_description"
+                    style="@style/TvBro.Text.Subtitle"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/spacing_md"
+                    android:ellipsize="end"
+                    android:textSize="@dimen/text_sm"
                 tools:text="Шесть звездных участников пройдут ряд испытаний..." />
 
             <TextView
@@ -297,7 +296,6 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="@dimen/spacing_xs"
                 android:ellipsize="end"
-                android:maxLines="3"
                 android:textSize="@dimen/text_md"
                 android:visibility="gone"
                 tools:text="Робот-воин, известный как Мобильный Бронированный Компьютеризированный Боец..."

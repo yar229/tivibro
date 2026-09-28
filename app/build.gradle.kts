@@ -3,6 +3,52 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
+// Version can be overridden from CI: ./gradlew -PappVersionName=1.2.3.4
+// A tag like v1.2.3.4 is passed through by the release workflow.
+val appVersionName: String = providers.gradleProperty("appVersionName").orNull?.trim()
+    ?.takeIf { it.isNotEmpty() }
+    ?: "1.0.3"
+
+// Android needs a monotonically increasing integer versionCode, so the dotted
+// name is folded into one: each component must fit in 0..99.
+// 1.2.3.4 -> ((1 * 100 + 2) * 100 + 3) * 100 + 4 = 1020304
+val appVersionCode: Int = appVersionName.split(".").let { parts ->
+    val components = (0..3).map { index ->
+        val raw = parts.getOrNull(index).orEmpty()
+        val value = if (raw.isEmpty()) 0 else raw.toIntOrNull()
+            ?: throw GradleException("Invalid appVersionName '$appVersionName': component '$raw' is not a number")
+        require(value in 0..99) {
+            "Invalid appVersionName '$appVersionName': component '$raw' must be between 0 and 99"
+        }
+        value
+    }
+    if (parts.size > 4) {
+        throw GradleException("Invalid appVersionName '$appVersionName': expected at most 4 components")
+    }
+    ((components[0] * 100 + components[1]) * 100 + components[2]) * 100 + components[3]
+}
+
+// Release signing is opt-in: when no keystore is configured the release APK
+// stays unsigned, exactly as before.
+val releaseStoreFile: String? =
+    providers.gradleProperty("TIVIBRO_STORE_FILE").orNull?.takeIf { it.isNotEmpty() }
+        ?: System.getenv("TIVIBRO_STORE_FILE")?.takeIf { it.isNotEmpty() }
+val releaseStorePassword: String? =
+    providers.gradleProperty("TIVIBRO_STORE_PASSWORD").orNull?.takeIf { it.isNotEmpty() }
+        ?: System.getenv("TIVIBRO_STORE_PASSWORD")?.takeIf { it.isNotEmpty() }
+val releaseKeyAlias: String? =
+    providers.gradleProperty("TIVIBRO_KEY_ALIAS").orNull?.takeIf { it.isNotEmpty() }
+        ?: System.getenv("TIVIBRO_KEY_ALIAS")?.takeIf { it.isNotEmpty() }
+val releaseKeyPassword: String? =
+    providers.gradleProperty("TIVIBRO_KEY_PASSWORD").orNull?.takeIf { it.isNotEmpty() }
+        ?: System.getenv("TIVIBRO_KEY_PASSWORD")?.takeIf { it.isNotEmpty() }
+val hasReleaseSigning = listOf(
+    releaseStoreFile,
+    releaseStorePassword,
+    releaseKeyAlias,
+    releaseKeyPassword,
+).all { !it.isNullOrEmpty() }
+
 android {
     namespace = "com.tvibro"
     compileSdk = 34
@@ -11,15 +57,27 @@ android {
         applicationId = "com.tvibro"
         minSdk = 21
         targetSdk = 34
-        versionCode = 4
-        versionName = "1.0.3"
+        versionCode = appVersionCode
+        versionName = appVersionName
         resourceConfigurations += setOf("en", "ru")
+    }
+
+    signingConfigs {
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = file(releaseStoreFile!!)
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
+        }
     }
 
     buildTypes {
         release {
             isMinifyEnabled = false
             isShrinkResources = false
+            signingConfig = signingConfigs.findByName("release")
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
         debug {

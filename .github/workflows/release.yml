@@ -1,0 +1,189 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and publish release
+    runs-on: ubuntu-latest
+
+    env:
+      ARCHIVE_BASE: TiViBro
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve version from tag
+        id: version
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME}"
+          version="${tag#v}"
+
+          if [ "$version" = "$tag" ]; then
+            echo "::error::Tag '$tag' must start with 'v' (expected e.g. v1.0.0.0)"
+            exit 1
+          fi
+
+          if ! echo "$version" | grep -Eq '^[0-9]{1,2}(\.[0-9]{1,2}){1,3}$'; then
+            echo "::error::Tag '$tag' is not a valid version. Expected vMAJOR.MINOR[.PATCH[.REVISION]] with each component in 0..99"
+            exit 1
+          fi
+
+          echo "tag=$tag"    >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Building TiViBro $version from tag $tag"
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Decode release keystore
+        id: keystore
+        env:
+          KEYSTORE_B64: ${{ secrets.TIVIBRO_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.TIVIBRO_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.TIVIBRO_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.TIVIBRO_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          for var in KEYSTORE_B64 STORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
+            if [ -z "${!var}" ]; then
+              echo "::error::Secret $var is not set."
+              echo "A release keystore is required, otherwise the APK cannot be installed."
+              exit 1
+            fi
+          done
+          printf '%s' "$KEYSTORE_B64" | tr -d '\n\r' | base64 -d > "$RUNNER_TEMP/release.jks"
+          if [ ! -s "$RUNNER_TEMP/release.jks" ]; then
+            echo "::error::Keystore decoding produced an empty file. Check TIVIBRO_KEYSTORE_BASE64."
+            exit 1
+          fi
+          echo "path=$RUNNER_TEMP/release.jks" >> "$GITHUB_OUTPUT"
+
+      - name: Build release APK
+        env:
+          STORE_FILE: ${{ steps.keystore.outputs.path }}
+          STORE_PASSWORD: ${{ secrets.TIVIBRO_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.TIVIBRO_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.TIVIBRO_KEY_PASSWORD }}
+          APP_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          chmod +x ./gradlew
+
+          # gradle.properties is gitignored, so the required AndroidX flags are
+          # passed explicitly here.
+          ./gradlew :app:assembleRelease \
+            --stacktrace \
+            -Pandroid.useAndroidX=true \
+            -Pandroid.nonTransitiveRClass=true \
+            -PappVersionName="$APP_VERSION" \
+            -PTIVIBRO_STORE_FILE="$STORE_FILE" \
+            -PTIVIBRO_STORE_PASSWORD="$STORE_PASSWORD" \
+            -PTIVIBRO_KEY_ALIAS="$KEY_ALIAS" \
+            -PTIVIBRO_KEY_PASSWORD="$KEY_PASSWORD"
+
+      - name: Verify APK version metadata
+        env:
+          APP_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          apk="app/build/outputs/apk/release/app-release.apk"
+          meta="app/build/outputs/apk/release/output-metadata.json"
+
+          if [ ! -f "$apk" ]; then
+            echo "::error::Expected APK not found at $apk"
+            ls -R app/build/outputs/apk || true
+            exit 1
+          fi
+
+          # Read the version Gradle actually packaged, rather than trusting the
+          # tag, so a mismatch fails the release instead of shipping.
+          actual_name="$(sed -n 's/.*"versionName" *: *"\([^"]*\)".*/\1/p' "$meta" | head -1)"
+          actual_code="$(sed -n 's/.*"versionCode" *: *\([0-9]*\).*/\1/p' "$meta" | head -1)"
+          echo "APK versionName=$actual_name versionCode=$actual_code"
+
+          if [ "$actual_name" != "$APP_VERSION" ]; then
+            echo "::error::versionName mismatch: APK has '$actual_name', tag says '$APP_VERSION'"
+            exit 1
+          fi
+
+          # Confirms the keystore was actually applied.
+          build_tools="$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)"
+          if [ ! -x "${build_tools}apksigner" ]; then
+            echo "::error::apksigner not found under ${build_tools}"
+            exit 1
+          fi
+          if ! "${build_tools}apksigner" verify --print-certs "$apk" > /dev/null; then
+            echo "::error::APK signature verification failed. Was the keystore applied?"
+            exit 1
+          fi
+          echo "APK signature verified"
+
+      - name: Package archive
+        id: package
+        env:
+          APP_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          src="app/build/outputs/apk/release/app-release.apk"
+          name="${ARCHIVE_BASE}-${APP_VERSION}"
+
+          cp "$src" "${name}.apk"
+          # Store the APK flat inside the archive, with the version in its name.
+          python3 -c "import shutil,sys; shutil.make_archive(sys.argv[1], 'zip', root_dir='.', base_dir=sys.argv[2])" "$name" "${name}.apk"
+          sha256sum "${name}.zip" > "${name}.zip.sha256"
+
+          echo "asset=${name}.zip" >> "$GITHUB_OUTPUT"
+          echo "checksum=${name}.zip.sha256" >> "$GITHUB_OUTPUT"
+          ls -l "${name}.zip" "${name}.apk"
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          set -euo pipefail
+          previous="$(git describe --tags --abbrev=0 "${GITHUB_REF_NAME}^" 2>/dev/null || true)"
+          {
+            echo "## TiViBro ${GITHUB_REF_NAME#v}"
+            echo
+            if [ -n "$previous" ]; then
+              echo "Changes since $previous:"
+              echo
+              git log --pretty='- %s' "$previous..${GITHUB_REF_NAME}"
+            else
+              echo "Initial release."
+            fi
+          } > "$RUNNER_TEMP/notes.md"
+          cat "$RUNNER_TEMP/notes.md"
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.version.outputs.tag }}
+          ASSET: ${{ steps.package.outputs.asset }}
+          CHECKSUM: ${{ steps.package.outputs.checksum }}
+        run: |
+          set -euo pipefail
+          gh release create "$TAG" \
+            "$ASSET" "$CHECKSUM" \
+            --title "TiViBro ${TAG#v}" \
+            --notes-file "$RUNNER_TEMP/notes.md"
+
+      - name: Upload archive as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.package.outputs.asset }}
+          path: ${{ steps.package.outputs.asset }}
+          if-no-files-found: error

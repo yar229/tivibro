@@ -583,7 +583,7 @@ sideChannelsList = findViewById(R.id.side_channels_list)
 
         updateStreamBadges()
 
-        val description = Fmt.shortDescription(prog?.description, maxChars = 500)
+        val description = Fmt.shortDescription(prog?.description, maxChars = 2000)
         switchDescription.text = description
         switchDescription.visible(description.isNotEmpty())
         switchDescription.maxLines = prefs.switchDescriptionMaxLines
@@ -667,9 +667,10 @@ sideChannelsList = findViewById(R.id.side_channels_list)
                 } else {
                     ""
                 }
-                val description = Fmt.shortDescription(prog?.description, maxChars = 500)
+                val description = Fmt.shortDescription(prog?.description, maxChars = 2000)
                 sideProgramDescription.text = description
                 sideProgramDescription.visible(description.isNotEmpty())
+                sideProgramDescription.maxLines = prefs.switchDescriptionMaxLines
                 if (schedule != null) {
                     sideScheduleChannelId = channelId
                     sideScheduleAdapter.submit(schedule)
@@ -859,6 +860,7 @@ sideChannelsList = findViewById(R.id.side_channels_list)
             }
         }
         infoDescription.text = prog?.description.orEmpty()
+        infoDescription.maxLines = prefs.switchDescriptionMaxLines
         if (prefs.showMediaProperties) {
             val size = engine.videoSize()
             infoStream.text = buildString {
