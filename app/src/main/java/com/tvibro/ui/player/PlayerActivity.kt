@@ -119,6 +119,7 @@ private var watchTimeMs = 0L
     private var videoHeight = 0
     private var sleepTimerAt = 0L
     private var hidden = false
+    private var keepPlayingBehind = false
     private var isSwitching = false
     private var bufferingChannelId: Long = -1L
 
@@ -187,11 +188,14 @@ private var watchTimeMs = 0L
     override fun onPause() {
         super.onPause()
         window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        if (::engine.isInitialized && !isFinishing) engine.pause()
+        // settings sit on top of a transparent panel, so playback must keep running
+        if (::engine.isInitialized && !isFinishing && !keepPlayingBehind) engine.pause()
+        keepPlayingBehind = false
     }
 
     override fun onResume() {
         super.onResume()
+        keepPlayingBehind = false
         if (::engine.isInitialized && !hidden) engine.play()
         // a foreground service would need a type on API 34+, a window flag is enough
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -1016,6 +1020,8 @@ sideChannelsList = findViewById(R.id.side_channels_list)
 
     private fun openSettings() {
         saveWatchTime()
+        // keep the channel playing behind the translucent settings panel
+        keepPlayingBehind = true
         startActivitySafely(Intent(this, SettingsActivity::class.java))
     }
 
