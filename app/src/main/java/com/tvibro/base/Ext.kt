@@ -115,6 +115,7 @@ object Fmt {
             return when {
                 videoHeight >= 4320 -> "8K"
                 videoHeight >= 2000 -> "4K"
+                videoHeight >= 1400 -> "2K"
                 videoHeight >= 1000 -> "FHD"
                 videoHeight >= 700 -> "HD"
                 else -> "SD"
@@ -124,6 +125,7 @@ object Fmt {
         return when {
             upper.contains("8K") || upper.contains("4320") -> "8K"
             upper.contains("4K") || upper.contains("UHD") || upper.contains("2160") -> "4K"
+            upper.contains("2K") || upper.contains("QHD") || upper.contains("1440") -> "2K"
             upper.contains("FHD") || upper.contains("1080") -> "FHD"
             upper.contains("HD") || upper.contains("HEVC") || upper.contains("H265") -> "HD"
             upper.contains("SD") || upper.contains("480") -> "SD"

@@ -125,16 +125,22 @@ class PlayerActivity : AppCompatActivity() {
     private var navigationIdsLoading = false
     private var sideProgramChannelIds: List<Long> = emptyList()
     private var lastSideProgramsAt = 0L
-    private var panelTimeout = 0L
+private var panelTimeout = 0L
     private var switchTimeout = 0L
-private var watchStart = 0L
-private var watchTimeMs = 0L
+ private var watchStart = 0L
+ private var watchTimeMs = 0L
     private var videoHeight = 0
     private var sleepTimerAt = 0L
     private var hidden = false
     private var keepPlayingBehind = false
     private var isSwitching = false
     private var bufferingChannelId: Long = -1L
+    /** Last known stream metadata per channel (resolution/fps/audio), reused while a fresh
+     *  stream has not reported its own values yet. LRU, bounded to avoid unbounded growth. */
+    private val streamMetaCache = object : LinkedHashMap<Long, StreamMeta>(64, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Long, StreamMeta>): Boolean =
+            size > 200
+    }
 
     // Playback readiness is the only reliable "switching finished" signal, and it does not
     // always arrive when channels are switched quickly: the engine may already have reported
@@ -532,6 +538,12 @@ sideChannelsList = findViewById(R.id.side_channels_list)
                     switchTimeout = 0
                     switchPanel.visibility = View.GONE
                 }
+                // stream metadata arrives asynchronously; keep the per-channel cache warm
+                // even while the panel is hidden, then refresh badges while it is up
+                if (::engine.isInitialized && channel != null) {
+                    cacheStreamMeta()
+                    if (switchPanel.visibility == View.VISIBLE) updateStreamBadges()
+                }
       if (watchStart > 0 && engine.isPlaying()) watchTimeMs += 1000
       // Keep the EPG progress bars in the channel list moving while it stays open.
       if (sideChannelsVisible && now - lastSideProgramsAt > SIDE_PROGRAMS_REFRESH_MS) {
@@ -638,9 +650,9 @@ sideChannelsList = findViewById(R.id.side_channels_list)
 
         if (prefs.showInfoOnSwitch) {
             switchPanel.visible(true)
+            switchTimeout = System.currentTimeMillis() + (prefs.displayChangeTimeout * 1000L)
             if (!sideChannelsVisible) switchPanel.requestFocus()
             if (prefs.showDescriptionOnSwitch) updateInfoPanel()
-            switchTimeout = System.currentTimeMillis() + (prefs.displayChangeTimeout * 1000L)
         }
         if (prefs.showBlackScreen) {
             showMessage(getString(R.string.stream_buffering))
@@ -659,20 +671,45 @@ sideChannelsList = findViewById(R.id.side_channels_list)
         }
     }
 
+    private fun cacheStreamMeta() {
+        if (!::engine.isInitialized) return
+        val ch = channel ?: return
+        val meta = streamMetaCache.getOrPut(ch.id) { StreamMeta() }
+        // refresh the cache with whatever the current stream reports
+        val size = engine.videoSize()
+        if (size != null) {
+            meta.width = size.first
+            meta.height = size.second
+        }
+        engine.videoFps()?.let { meta.fps = it }
+        engine.audioChannels()?.let { meta.audio = it }
+        Log.d("TvibroBadges", "ch=${ch.name} size=$size cached=${meta.width}x${meta.height} fps=${meta.fps} audio=${meta.audio} vH=$videoHeight eng=${engine.javaClass.simpleName}")
+    }
+
     private fun updateStreamBadges() {
         if (!::engine.isInitialized) return
         val ch = channel ?: return
-        val quality = Fmt.qualityLabel(ch.name, videoHeight)
+        val meta = streamMetaCache.getOrPut(ch.id) { StreamMeta() }
+        cacheStreamMeta()
+
+        val height = if (meta.height > 0) meta.height else videoHeight
+        val quality = if (prefs.showVideoResolution) {
+            when {
+                meta.resolution != null -> meta.resolution
+                videoHeight > 0 -> "${videoHeight}p"
+                else -> Fmt.qualityLabel(ch.name, height)
+            }
+        } else {
+            Fmt.qualityLabel(ch.name, height)
+        }
         switchQuality.text = quality.orEmpty()
         switchQuality.visible(quality != null)
 
-        val fps = engine.videoFps()
-        switchFps.text = fps?.let { "${it.toInt()} FPS" }.orEmpty()
-        switchFps.visible(fps != null)
+        switchFps.text = if (meta.fps != null) "${meta.fps!!.toInt()} FPS" else ""
+        switchFps.visible(meta.fps != null)
 
-        val channels = engine.audioChannels()
-        switchAudio.text = channels?.let { audioLabel(it) }.orEmpty()
-        switchAudio.visible(channels != null)
+        switchAudio.text = meta.audio?.let { audioLabel(it) }.orEmpty()
+        switchAudio.visible(meta.audio != null)
     }
 
     private fun audioLabel(channels: Int): String = when (channels) {
@@ -1465,5 +1502,16 @@ sideChannelsList = findViewById(R.id.side_channels_list)
         /** How long the focused channel's details wait before the heavy DB load starts. */
         const val SIDE_PROGRAM_DEBOUNCE_MS = 250L
     }
+}
+
+/** Last known decoded stream properties for a channel, used until the stream reports new ones. */
+class StreamMeta {
+    var width: Int = 0
+    var height: Int = 0
+    var fps: Float? = null
+    var audio: Int? = null
+
+    val resolution: String? get() =
+        if (width > 0 && height > 0) "${width}x${height}" else null
 }
 

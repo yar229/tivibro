@@ -3,6 +3,10 @@ package com.tvibro.ui.player
 import android.content.Context
 import android.net.Uri
 import android.graphics.Matrix
+import android.media.MediaExtractor
+import android.media.MediaFormat
+import android.os.Handler
+import android.os.Looper
 import android.view.TextureView
 import android.view.View
 import android.view.ViewGroup
@@ -30,7 +34,9 @@ import com.tvibro.data.MIN_BUFFER_MS
 import org.videolan.libvlc.LibVLC
 import org.videolan.libvlc.Media
 import org.videolan.libvlc.MediaPlayer
+import org.videolan.libvlc.interfaces.IMedia
 import org.videolan.libvlc.interfaces.IVLCVout
+import java.util.concurrent.Executors
 
 interface PlaybackEngine {
     val surfaceView: View
@@ -331,6 +337,7 @@ class VlcEngine(context: Context, private val parent: ViewGroup) : PlaybackEngin
                 ) {
                     lastLayout = VideoLayout(width, height, visibleWidth, visibleHeight, sarNum, sarDen)
                     applyAspectMode()
+                    notifyVideoSize()
                 }
             })
             mediaPlayer.setVideoTrackEnabled(true)
@@ -345,6 +352,11 @@ class VlcEngine(context: Context, private val parent: ViewGroup) : PlaybackEngin
                     onBuffering?.invoke(false)
                     onReady?.invoke()
                     applyAspectMode()
+                    kickParse()
+                    mainHandler.postDelayed({
+                        if (!videoReady(bestSnapshot) && decoderSize == null) kickDecoderProbe()
+                    }, 6000L)
+                    notifyVideoSize()
                 }
                 MediaPlayer.Event.Buffering -> onBuffering?.invoke(event.buffering < 100f)
                 MediaPlayer.Event.EndReached -> {
@@ -355,26 +367,518 @@ class VlcEngine(context: Context, private val parent: ViewGroup) : PlaybackEngin
                     onBuffering?.invoke(false)
                     onError?.invoke("Playback error")
                 }
+                MediaPlayer.Event.ESAdded, MediaPlayer.Event.ESSelected, MediaPlayer.Event.Vout -> {
+                    val track = mediaPlayer.currentVideoTrack
+                    if (track != null) lastEventVideoTrack = track
+                    kickParse()
+                    notifyVideoSize()
+                }
                 else -> Unit
             }
         }
     }
 
-    override fun videoSize(): Pair<Int, Int>? = runCatching {
-        val vw = mediaPlayer.currentVideoTrack?.width ?: 0
-        val vh = mediaPlayer.currentVideoTrack?.height ?: 0
-        if (vw > 0 && vh > 0) vw to vh else null
-    }.getOrNull()
+    private fun eventName(type: Int): String = when (type) {
+        MediaPlayer.Event.ESAdded -> "ESAdded"
+        MediaPlayer.Event.ESSelected -> "ESSelected"
+        MediaPlayer.Event.Vout -> "Vout"
+        else -> "EVT$type"
+    }
 
-    override fun videoFps(): Float? = runCatching {
+    /** libvlc fills video/audio tracks asynchronously; expose whichever is known first. */
+    private fun notifyVideoSize() {
+        if (onVideoSize == null) return
+        val size = videoSize()
+        if (size != null && size.first > 0 && size.second > 0) {
+            runCatching { onVideoSize?.invoke(size.first, size.second) }
+        }
+    }
+
+    override fun videoSize(): Pair<Int, Int>? = snapshotSize(bestSnapshot)
+        ?: eventTrackSize()
+        ?: currentTrackSize()
+        ?: decoderSize
+        ?: lastLayout?.takeIf { l -> l.visibleWidth > 0 && l.visibleHeight > 0 }
+            ?.let { it.visibleWidth to it.visibleHeight }
+
+    private fun eventTrackSize(): Pair<Int, Int>? {
+        val track = lastEventVideoTrack ?: return null
+        val w = track.width
+        val h = track.height
+        return if (w > 0 && h > 0) w to h else null
+    }
+
+    private fun currentTrackSize(): Pair<Int, Int>? {
         val track = mediaPlayer.currentVideoTrack ?: return null
-        if (track.frameRateDen > 0) track.frameRateNum.toFloat() / track.frameRateDen else null
-    }.getOrNull()
+        val w = track.width
+        val h = track.height
+        return if (w > 0 && h > 0) w to h else null
+    }
 
-    override fun audioChannels(): Int? {
-        // libvlc MediaPlayer exposes audio track names/ids, but not channel count directly.
+    override fun videoFps(): Float? = snapshotFps(bestSnapshot)
+        ?: eventTrackFps()
+        ?: currentTrackFps()
+        ?: decoderFps
+
+    private fun eventTrackFps(): Float? {
+        val track = lastEventVideoTrack ?: return null
+        return if (track.frameRateDen > 0) track.frameRateNum.toFloat() / track.frameRateDen else null
+    }
+
+    private fun currentTrackFps(): Float? {
+        val track = mediaPlayer.currentVideoTrack ?: return null
+        return if (track.frameRateDen > 0) track.frameRateNum.toFloat() / track.frameRateDen else null
+    }
+
+    override fun audioChannels(): Int? = snapshotChannels(bestSnapshot)
+
+    private data class ParsedTrack(
+        val type: Int,
+        val codec: String,
+        val videoWidth: Int,
+        val videoHeight: Int,
+        val fpsNum: Int,
+        val fpsDen: Int,
+        val audioChannels: Int,
+        val audioRate: Int,
+    )
+
+    /** Snapshot of the last parse result, read on the main thread so the UI never blocks on
+     *  libvlc. [IMedia] objects are ref-counted: every [MediaPlayer.getMedia] must end with
+     *  [IMedia.release] or the native object leaks. */
+    private var parsedSnapshot: List<ParsedTrack>? = null
+
+    /** libvlc fills live-stream track dimensions asynchronously: the first parse often reports 0x0
+     *  and a later one the real size. Keep the best snapshot so a bad read never erases a good one.
+     *  Re-parses run off the UI thread on the executor; the [IMedia] object from
+     *  [MediaPlayer.getMedia] is released right after extraction. */
+    private var bestSnapshot: List<ParsedTrack>? = null
+
+    private var lastParseAt = 0L
+    private var lastEventVideoTrack: IMedia.VideoTrack? = null
+    private var probeParsing = false
+    private var parseAttempts = 0
+    private var parseGeneration = 0
+    private val parseExecutor = Executors.newSingleThreadExecutor()
+    private val decoderExecutor = Executors.newSingleThreadExecutor()
+    private var decoderProbing = false
+    private var decoderProbeUrl: String? = null
+    private var parseProbeUa: String? = null
+    /** Real dimensions parsed straight from the stream's SPS (what the hardware decoder sees),
+     *  independent of VLC's Java track API which often stays 0x0 on live channels. */
+    private var decoderSize: Pair<Int, Int>? = null
+    private var decoderFps: Float? = null
+    private val mainHandler = Handler(Looper.getMainLooper())
+
+    private fun videoReady(tracks: List<ParsedTrack>?): Boolean =
+        tracks?.any { it.videoWidth > 0 && it.videoHeight > 0 && it.fpsDen > 0 } == true
+
+    /** Parse the PLAYER's own media off the UI thread. libvlc fills live-stream track dimensions
+     *  asynchronously right after the demuxer is live, so re-parsing the same (playing) media is
+     *  what catches the window: a standalone probe with the same URL is a second connection that is
+     *  observably slower and often reports 0x0. Every [MediaPlayer.getMedia] is ref-counted and
+     *  must end with [IMedia.release]. */
+    private fun kickParse() {
+        val now = System.currentTimeMillis()
+        if (probeParsing || videoReady(bestSnapshot) || now - lastParseAt < 1500L) return
+        if (parseAttempts >= MAX_PARSE_ATTEMPTS) return
+        parseAttempts++
+        lastParseAt = now
+        probeParsing = true
+        val gen = parseGeneration
+        parseExecutor.execute {
+            val media = runCatching { mediaPlayer.getMedia() }.getOrNull()
+            val snapshot = if (media != null) {
+                try {
+                    runCatching { media.parse(3000) }
+                    extractTracks(media)
+                } finally {
+                    runCatching { media.release() }
+                }
+            } else emptyList()
+            mainHandler.post {
+                probeParsing = false
+                if (gen != parseGeneration) return@post
+                if (snapshot.isNotEmpty()) {
+                    if (videoReady(snapshot) || !videoReady(bestSnapshot)) {
+                        bestSnapshot = snapshot
+                    }
+                    parsedSnapshot = snapshot
+                }
+                notifyVideoSize()
+                if (!videoReady(bestSnapshot) && parseAttempts < MAX_PARSE_ATTEMPTS) {
+                    mainHandler.postDelayed(::kickParse, 1500L)
+                } else if (!videoReady(bestSnapshot)) {
+                    kickDecoderProbe()
+                }
+            }
+        }
+    }
+
+    /** VLC's IMedia/VLC vout API keeps reporting 0x0 for many live channels even though the
+     *  hardware decoder knows the real size. Fall back to reading the H.264 SPS right out of the
+     *  stream (the same bytes the demuxer hands to the decoder) and decoding width/height from it.
+     *  Runs on its own executor so it never blocks parsing or rendering. */
+    private fun kickDecoderProbe() {
+        if (decoderProbing || decoderSize != null || parseGeneration == 0) return
+        val url = decoderProbeUrl ?: return
+        decoderProbing = true
+        val gen = parseGeneration
+        decoderExecutor.execute {
+            Log.d("TvibroBadges", "SPS decoder probe start")
+            val raw = runCatching { probeSps(url) }.getOrNull()
+            val result = raw ?: runCatching { probeExtractor(url) }.getOrNull()
+            mainHandler.post {
+                decoderProbing = false
+                if (gen != parseGeneration) return@post
+                if (result != null) {
+                    decoderSize = result.first
+                    decoderFps = result.second
+                    Log.d("TvibroBadges", "SPS decoder size=${result.first} fps=${result.second}")
+                    notifyVideoSize()
+                } else {
+                    Log.d("TvibroBadges", "SPS decoder no result, retrying")
+                    mainHandler.postDelayed({
+                        if (gen == parseGeneration && decoderSize == null && !decoderProbing) {
+                            kickDecoderProbe()
+                        }
+                    }, 8000L)
+                }
+            }
+        }
+    }
+
+    private fun probeSps(url: String): Pair<Pair<Int, Int>, Float?>? {
+        val connection = (java.net.URL(url).openConnection() as java.net.HttpURLConnection).apply {
+            connectTimeout = 8000
+            readTimeout = 8000
+            setRequestProperty("User-Agent", parseProbeUa ?: "VLC/3.6.5 LibVLC/3.6.5")
+        }
+        try {
+            val input = connection.inputStream
+            val buffer = ByteArray(32 * 1024)
+            val acc = java.io.ByteArrayOutputStream()
+            var lastScan = 0
+            val deadline = System.currentTimeMillis() + 45000
+            while (System.currentTimeMillis() < deadline) {
+                val read = runCatching { input.read(buffer) }.getOrDefault(-1)
+                if (read < 0) break
+                acc.write(buffer, 0, read)
+                if (acc.size() - lastScan > 32 * 1024) {
+                    lastScan = acc.size()
+                    findSps(acc.toByteArray())?.let { return it }
+                }
+            }
+            return findSps(acc.toByteArray())
+        } finally {
+            runCatching { connection.disconnect() }
+        }
+    }
+
+    /** Locate an H.264 SPS NAL unit (type 7) with a recognized profile and yield
+     *  (width, height) and fps (from VUI timing_info, may be null). Mirrors what the
+     *  hardware decoder reads from the stream. */
+    private fun findSps(bytes: ByteArray): Pair<Pair<Int, Int>, Float?>? {
+        var i = 0
+        while (i < bytes.size - 8) {
+            if (bytes[i].toInt() == 0 && bytes[i + 1].toInt() == 0 && bytes[i + 2].toInt() == 1 &&
+                (bytes[i + 3].toInt() and 0x1f) == 7
+            ) {
+                // profile_idc sanity: reject random TS payloads that happen to look like an SPS.
+                val profile = bytes[i + 4].toInt() and 0xff
+                if (profile !in intArrayOf(66, 77, 88, 100, 110, 122, 144, 244)) {
+                    i += 3
+                    continue
+                }
+                val nalLen = bytes.size - (i + 4)
+                val rbsp = unescapeRbsp(bytes, i + 4, nalLen)
+                parseSps(rbsp)?.let { return it }
+                i += 3
+            }
+            i++
+        }
         return null
     }
+
+    /** Strip emulation-prevention 0x03 bytes from H.264 ES, like the decoder does. */
+    private fun unescapeRbsp(bytes: ByteArray, start: Int, len: Int): ByteArray {
+        val out = java.io.ByteArrayOutputStream(len)
+        var zeros = 0
+        for (j in start until start + len) {
+            val b = bytes[j].toInt() and 0xff
+            if (zeros >= 2 && b == 3) {
+                zeros = 0
+                continue
+            }
+            out.write(b)
+            zeros = if (b == 0) zeros + 1 else 0
+        }
+        return out.toByteArray()
+    }
+
+    /** Parse an SPS NV unit (starting right after the 1-byte NAL header): width/height from
+     *  pic_width_in_mbs_minus1 / pic_height_in_map_units_minus1 with crops, fps from VUI. */
+    private fun parseSps(rbsp: ByteArray): Pair<Pair<Int, Int>, Float?>? {
+        if (rbsp.size < 4) return null
+
+        // Bit offset after profile_idc(8) + constraint flags(8) + level_idc(8).
+        var bitPos = 24
+
+        // seq_parameter_set_id ue(v)
+        val s = readUe(rbsp, bitPos) ?: return null
+        bitPos = s.first
+        // log2_max_frame_num_minus4 ue(v)
+        val m = readUe(rbsp, bitPos) ?: return null
+        bitPos = m.first
+        // pic_order_cnt_type ue(v)
+        val poct = readUe(rbsp, bitPos) ?: return null
+        bitPos = poct.first
+        when (poct.second) {
+            0 -> {
+                val off = readUe(rbsp, bitPos) ?: return null
+                bitPos = off.first
+            }
+            1 -> {
+                // delta_pic_order_always_zero_flag(1)
+                if (readBits(rbsp, bitPos, 1) == null) return null
+                bitPos++
+                // offset_for_non_ref_pic se(v)
+                val se1 = readSe(rbsp, bitPos) ?: return null
+                bitPos = se1.first
+                // offset_for_top_to_bottom_field se(v)
+                val se2 = readSe(rbsp, bitPos) ?: return null
+                bitPos = se2.first
+                val n = readUe(rbsp, bitPos) ?: return null
+                bitPos = n.first
+                repeat(n.second) {
+                    val se = readSe(rbsp, bitPos) ?: return null
+                    bitPos = se.first
+                }
+            }
+            else -> return null
+        }
+        // max_num_ref_frames ue(v)
+        val ref = readUe(rbsp, bitPos) ?: return null
+        bitPos = ref.first
+        // gaps_in_frame_num_value_allowed_flag(1)
+        if (readBits(rbsp, bitPos, 1) == null) return null
+        bitPos++
+
+        // pic_width_in_mbs_minus1 ue(v)
+        val widthMb = readUe(rbsp, bitPos) ?: return null
+        bitPos = widthMb.first
+        // pic_height_in_map_units_minus1 ue(v)
+        val heightMap = readUe(rbsp, bitPos) ?: return null
+        bitPos = heightMap.first
+
+        // frame_mbs_only_flag(1)
+        val frameMbsOnly = readBits(rbsp, bitPos, 1) ?: return null
+        bitPos = frameMbsOnly.second
+        if (frameMbsOnly.first == 0) {
+            // mb_adaptive_frame_field_flag(1)
+            if (readBits(rbsp, bitPos, 1) == null) return null
+            bitPos++
+        }
+        // direct_8x8_inference_flag(1)
+        if (readBits(rbsp, bitPos, 1) == null) return null
+        bitPos++
+        // frame_cropping_flag(1)
+        val cropping = readBits(rbsp, bitPos, 1) ?: return null
+        bitPos = cropping.second
+        var cropLeft = 0
+        var cropRight = 0
+        var cropTop = 0
+        var cropBottom = 0
+        if (cropping.first == 1) {
+            val l = readUe(rbsp, bitPos) ?: return null
+            bitPos = l.first
+            val r = readUe(rbsp, bitPos) ?: return null
+            bitPos = r.first
+            val t = readUe(rbsp, bitPos) ?: return null
+            bitPos = t.first
+            val b = readUe(rbsp, bitPos) ?: return null
+            bitPos = b.first
+            cropLeft = l.second
+            cropRight = r.second
+            cropTop = t.second
+            cropBottom = b.second
+        }
+        // vui_parameters_present_flag(1)
+        val vuiPresent = readBits(rbsp, bitPos, 1)?.first == 1
+
+        var fps: Float? = null
+        if (vuiPresent) {
+            bitPos++
+            parseVui(rbsp, bitPos)?.let { (fpsValue, next) ->
+                fps = fpsValue
+                bitPos = next
+            }
+        }
+
+        // 4:2:0 chroma → crop units are 2 and 2 in the sample dimensions.
+        val width = (widthMb.second + 1) * 16 - (cropLeft + cropRight) * 2
+        val height = (2 - frameMbsOnly.first) * (heightMap.second + 1) * 16 -
+            (cropTop + cropBottom) * 2
+        if (width < 320 || height < 176 || width > 4096 || height > 2160) return null
+        return (width to height) to fps
+    }
+
+    /** Parse VUI from the given bit offset; returns (fpsOrNull, newBitPos). VUI must be walked
+     *  field by field to reach timing_info: many flags are followed by fixed-size payloads. */
+    private fun parseVui(rbsp: ByteArray, start: Int): Pair<Float?, Int>? {
+        var bitPos = start
+        // aspect_ratio_info_present_flag(1)
+        if (readBits(rbsp, bitPos, 1)?.first == 1) {
+            bitPos++
+            val aspectIdc = readBits(rbsp, bitPos, 8)?.first ?: return null
+            bitPos += 8
+            if (aspectIdc == 255) bitPos += 32 // extended_sar_width(16)+height(16)
+        } else {
+            bitPos++
+        }
+        // overscan_info_present_flag(1)
+        if (readBits(rbsp, bitPos, 1)?.first == 1) {
+            bitPos++
+            bitPos++ // overscan_appropriate_flag
+        } else {
+            bitPos++
+        }
+        // video_signal_type_present_flag(1)
+        if (readBits(rbsp, bitPos, 1)?.first == 1) {
+            bitPos++
+            bitPos += 3 // video_format
+            bitPos++ // video_full_range_flag
+            // colour_description_present_flag(1)
+            if (readBits(rbsp, bitPos, 1)?.first == 1) {
+                bitPos++
+                bitPos += 24 // colour_primaries, transfer_characteristics, matrix_coefficients
+            } else {
+                bitPos++
+            }
+        } else {
+            bitPos++
+        }
+        // chroma_loc_info_present_flag(1)
+        if (readBits(rbsp, bitPos, 1)?.first == 1) {
+            bitPos++
+            val u1 = readUe(rbsp, bitPos) ?: return null
+            bitPos = u1.first
+            val u2 = readUe(rbsp, bitPos) ?: return null
+            bitPos = u2.first
+        } else {
+            bitPos++
+        }
+        // timing_info_present_flag(1)
+        if (readBits(rbsp, bitPos, 1)?.first != 1) return null to start
+        bitPos++
+        val numUnits = readBits(rbsp, bitPos, 32) ?: return null
+        bitPos = numUnits.second
+        val timeScale = readBits(rbsp, bitPos, 32) ?: return null
+        bitPos = timeScale.second
+        val fps = if (numUnits.first > 0 && timeScale.first > 0)
+            timeScale.first.toFloat() / (2f * numUnits.first)
+        else null
+        return fps to bitPos
+    }
+
+    /** Try Android's MediaExtractor (system demuxer) on the same URL — same stack the
+     *  platform decoder uses, so it's the closest analogue to what the decoder sees. */
+    private fun probeExtractor(url: String): Pair<Pair<Int, Int>, Float?>? {
+        val ext = android.media.MediaExtractor()
+        try {
+            ext.setDataSource(url)
+            for (i in 0 until ext.trackCount) {
+                val fmt = ext.getTrackFormat(i)
+                val mime = fmt.getString(android.media.MediaFormat.KEY_MIME).orEmpty()
+                if (mime.startsWith("video/")) {
+                    val w = fmt.getInteger(android.media.MediaFormat.KEY_WIDTH)
+                    val h = fmt.getInteger(android.media.MediaFormat.KEY_HEIGHT)
+                    val fps = if (fmt.containsKey(android.media.MediaFormat.KEY_FRAME_RATE))
+                        fmt.getFloat(android.media.MediaFormat.KEY_FRAME_RATE) else null
+                    if (w in 320..4096 && h in 176..2160) {
+                        return (w to h) to fps
+                    }
+                }
+            }
+        } finally {
+            runCatching { ext.release() }
+        }
+        return null
+    }
+
+    /** Read an unsigned Exp-Golomb code; returns (newBitPos, value). */
+    private fun readUe(bytes: ByteArray, start: Int): Pair<Int, Int>? {
+        var zeros = 0
+        var p = start
+        while (true) {
+            val bit = readBits(bytes, p, 1) ?: return null
+            p = bit.second
+            if (bit.first == 1) break
+            zeros++
+            if (zeros > 31) return null
+        }
+        var value = 1
+        for (j in 0 until zeros) {
+            val bit = readBits(bytes, p, 1) ?: return null
+            p = bit.second
+            value = (value shl 1) or bit.first
+        }
+        value--
+        if (value < 0 || value > 1 shl 20) return null
+        return p to value
+    }
+
+    /** Read a signed Exp-Golomb code; returns (newBitPos, value). */
+    private fun readSe(bytes: ByteArray, start: Int): Pair<Int, Int>? {
+        val ue = readUe(bytes, start) ?: return null
+        val code = ue.second
+        val value = if (code % 2 == 0) (code / -2) else ((code + 1) / 2)
+        return ue.first to value
+    }
+
+    private fun readBits(bytes: ByteArray, pos: Int, count: Int): Pair<Int, Int>? {
+        if (count > 64) return null
+        var value = 0
+        var p = pos
+        for (j in 0 until count) {
+            val byteIdx = p / 8
+            if (byteIdx >= bytes.size) return null
+            val bit = (bytes[byteIdx].toInt() shr (7 - (p % 8))) and 1
+            value = (value shl 1) or bit
+            p++
+        }
+        return value to p
+    }
+
+    private fun extractTracks(media: IMedia): List<ParsedTrack> = runCatching {
+        val count = media.trackCount
+        (0 until count).mapNotNull { i ->
+            val t = runCatching { media.getTrack(i) }.getOrNull() ?: return@mapNotNull null
+            val v = t as? IMedia.VideoTrack
+            val a = t as? IMedia.AudioTrack
+            ParsedTrack(
+                type = t.type,
+                codec = t.codec,
+                videoWidth = v?.width ?: 0,
+                videoHeight = v?.height ?: 0,
+                fpsNum = v?.frameRateNum ?: 0,
+                fpsDen = v?.frameRateDen ?: 0,
+                audioChannels = a?.channels ?: 0,
+                audioRate = a?.rate ?: 0,
+            )
+        }
+    }.getOrElse { emptyList() }
+
+    private fun snapshotSize(snapshot: List<ParsedTrack>?): Pair<Int, Int>? =
+        snapshot?.firstNotNullOfOrNull { it.takeIf { t -> t.videoWidth > 0 && t.videoHeight > 0 } }
+            ?.let { it.videoWidth to it.videoHeight }
+
+    private fun snapshotFps(snapshot: List<ParsedTrack>?): Float? =
+        snapshot?.firstNotNullOfOrNull { it.takeIf { t -> t.fpsDen > 0 } }
+            ?.let { it.fpsNum.toFloat() / it.fpsDen }
+
+    private fun snapshotChannels(snapshot: List<ParsedTrack>?): Int? =
+        snapshot?.firstNotNullOfOrNull { it.takeIf { t -> t.audioChannels > 0 } }?.audioChannels
 
     override fun prepare(url: String, userAgent: String, startPositionMs: Long) {
         if (!surfaceReady) {
@@ -391,9 +895,25 @@ class VlcEngine(context: Context, private val parent: ViewGroup) : PlaybackEngin
         media.addOption(":network-caching=3000")
         if (startPositionMs > 0) media.addOption(":start-time=$startPositionMs")
         media.setDefaultMediaPlayerOptions()
+        parsedSnapshot = null
+        bestSnapshot = null
+        lastEventVideoTrack = null
+        lastParseAt = 0L
+        parseAttempts = 0
+        parseGeneration++
+        probeParsing = false
+        decoderSize = null
+        decoderFps = null
+        decoderProbing = false
+        decoderProbeUrl = url
+        parseProbeUa = userAgent
         mediaPlayer.setMedia(media)
         mediaPlayer.play()
         mediaPlayer.setVideoTrackEnabled(true)
+        kickParse()
+        mainHandler.postDelayed({
+            if (!videoReady(bestSnapshot) && decoderSize == null) kickDecoderProbe()
+        }, 3500L)
         media.release()
     }
 
@@ -482,6 +1002,9 @@ class VlcEngine(context: Context, private val parent: ViewGroup) : PlaybackEngin
     }
 
     override fun release() {
+        probeParsing = false
+        parseExecutor.shutdownNow()
+        decoderExecutor.shutdownNow()
         runCatching { mediaPlayer.stop() }
         runCatching { mediaPlayer.release() }
         runCatching { libVLC.release() }
@@ -495,5 +1018,6 @@ class VlcEngine(context: Context, private val parent: ViewGroup) : PlaybackEngin
 
     companion object {
         private const val ASPECT_MODES = 3
+        private const val MAX_PARSE_ATTEMPTS = 6
     }
 }
