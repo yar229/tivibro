@@ -29,6 +29,15 @@
         <item name="android:backgroundDimEnabled">true</item>
     </style>
 
+    <!-- Settings slides in as a translucent panel over the window below it -->
+    <style name="Theme.TvBro.Settings" parent="Theme.TvBro">
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:colorBackgroundCacheHint">@null</item>
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:backgroundDimEnabled">false</item>
+        <item name="android:windowAnimationStyle">@null</item>
+    </style>
+
     <style name="TvBro.Text.Title" parent="">
         <item name="android:textColor">@color/text_primary</item>
         <item name="android:textSize">@dimen/text_md</item>

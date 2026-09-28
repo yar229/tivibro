@@ -664,4 +664,22 @@
         <item>Очень большой</item>
         <item>Максимальный</item>
     </string-array>
+    <string name="home_screen">Главный экран</string>
+    <string name="playlists_and_channels">Плейлисты и каналы</string>
+    <string name="history">История</string>
+    <string name="startup">Запуск</string>
+    <string name="data">Данные и безопасность</string>
+    <string name="updates">Обновления</string>
+    <string name="video_and_audio">Видео и звук</string>
+    <string name="seeking">Перемотка</string>
+    <string name="timeouts">Таймауты и задержки</string>
+    <string name="player_interface">Интерфейс плеера</string>
+    <string name="markers">Подсветка</string>
+    <string name="navigation">Навигация</string>
+    <plurals name="settings_items_count">
+        <item quantity="one">%d параметр</item>
+        <item quantity="few">%d параметра</item>
+        <item quantity="many">%d параметров</item>
+        <item quantity="other">%d параметра</item>
+    </plurals>
 </resources>

@@ -5,88 +5,150 @@ import android.text.InputType
 import android.view.View
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.addCallback
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.doOnPreDraw
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.tvibro.R
 import com.tvibro.TvBroApp
 import com.tvibro.base.toast
 import com.tvibro.data.Prefs
+import com.tvibro.data.model.EpgSource
 import com.tvibro.ui.common.Dialogs
 import com.tvibro.ui.common.PinGate
 import com.tvibro.ui.playlist.PlaylistWizardActivity
 import java.io.File
-import java.text.SimpleDateFormat
-import java.util.Locale
 
 class SettingsActivity : AppCompatActivity() {
+
+    private data class SettingsGroup(val title: String, val items: List<SettingItem>)
 
     private lateinit var prefs: Prefs
     private lateinit var settingsAdapter: SettingsAdapter
     private lateinit var groupAdapter: SettingsGroupAdapter
+    private lateinit var list: RecyclerView
+    private lateinit var panel: View
+    private lateinit var scrim: View
+    private lateinit var titleView: TextView
     private lateinit var statusView: TextView
-    private lateinit var settingsList: RecyclerView
-    private val groups = mutableListOf<SettingsGroup>()
-
-    private data class SettingsGroup(val title: String, val startIndex: Int)
+    private lateinit var backButton: View
+    private var groups: List<SettingsGroup> = emptyList()
+    private var openIndex = NO_GROUP
+    private var closing = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         prefs = Prefs.get(this)
         setContentView(R.layout.activity_settings)
+
+        panel = findViewById(R.id.settings_panel)
+        scrim = findViewById(R.id.settings_scrim)
+        titleView = findViewById(R.id.settings_title)
         statusView = findViewById(R.id.settings_status)
-        findViewById<View>(R.id.back_button).setOnClickListener { finish() }
+        backButton = findViewById(R.id.back_button)
+        list = findViewById(R.id.settings_list)
+
+        backButton.setOnClickListener { navigateBack() }
+        scrim.setOnClickListener { close() }
+        onBackPressedDispatcher.addCallback(this) { navigateBack() }
 
         settingsAdapter = SettingsAdapter { item -> onItemClick(item) }
-        groupAdapter = SettingsGroupAdapter { position -> onGroupClick(position) }
+        groupAdapter = SettingsGroupAdapter { position -> openGroup(position) }
+        list.layoutManager = LinearLayoutManager(this)
 
-        settingsList = findViewById(R.id.settings_list)
-        settingsList.apply {
-            layoutManager = LinearLayoutManager(this@SettingsActivity)
-            adapter = settingsAdapter
-            addOnScrollListener(object : RecyclerView.OnScrollListener() {
-                override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
-                    updateSelectedGroupFromScroll()
-                }
-            })
-        }
-
-        findViewById<RecyclerView>(R.id.settings_groups).apply {
-            layoutManager = LinearLayoutManager(this@SettingsActivity)
-            adapter = groupAdapter
-        }
-
-        showRoot()
+        rebuild()
+        showRoot(focus = true)
+        animateIn()
     }
 
-    private fun onGroupClick(position: Int) {
-        val group = groups.getOrNull(position) ?: return
-        settingsList.stopScroll()
-        (settingsList.layoutManager as? LinearLayoutManager)?.scrollToPositionWithOffset(group.startIndex, 0)
-        settingsList.post {
-            settingsList.findViewHolderForAdapterPosition(group.startIndex)?.itemView?.requestFocus()
-        }
-    }
-
-    private fun updateSelectedGroupFromScroll() {
-        val layoutManager = settingsList.layoutManager as? LinearLayoutManager ?: return
-        val first = layoutManager.findFirstVisibleItemPosition()
-        if (first == RecyclerView.NO_POSITION) return
-        val groupIndex = groups.indexOfLast { it.startIndex <= first }
-        if (groupIndex >= 0) {
-            groupAdapter.setSelected(groupIndex)
-            findViewById<RecyclerView>(R.id.settings_groups).scrollToPosition(groupIndex)
-        }
-    }
-
-    private fun showRoot() {
-        groups.clear()
-        val flatItems = buildList {
-            fun startGroup(title: String) {
-                groups.add(SettingsGroup(title, size))
+    private fun animateIn() {
+        val animate = prefs.animatedTransition
+        panel.doOnPreDraw {
+            if (animate) {
+                panel.translationX = panel.width.toFloat()
+                panel.animate().translationX(0f).setDuration(ENTER_MS).start()
+                scrim.animate().alpha(1f).setDuration(ENTER_MS).start()
+            } else {
+                panel.translationX = 0f
+                scrim.alpha = 1f
             }
+        }
+    }
 
-            startGroup(getString(R.string.general))
+    private fun close() {
+        if (closing) return
+        closing = true
+        backButton.isEnabled = false
+        scrim.isEnabled = false
+        if (!prefs.animatedTransition) {
+            finish()
+            return
+        }
+        panel.animate()
+            .translationX(panel.width.toFloat())
+            .setDuration(EXIT_MS)
+            .withEndAction { finish() }
+            .start()
+        scrim.animate().alpha(0f).setDuration(EXIT_MS).start()
+    }
+
+    private fun navigateBack() {
+        if (closing) return
+        if (openIndex != NO_GROUP) showRoot(focus = true) else close()
+    }
+
+    private fun rebuild() {
+        groups = buildGroups()
+        groupAdapter.submit(
+            groups.map { SettingsGroupAdapter.Entry(it.title, itemCountLabel(it.settingCount())) }
+        )
+        if (openIndex == NO_GROUP) {
+            showRoot(focus = false)
+        } else {
+            groups.getOrNull(openIndex)?.let { settingsAdapter.submit(it.items) }
+        }
+        statusView.text = getString(R.string.app_name) + " " + appVersion()
+    }
+
+    private fun showRoot(focus: Boolean) {
+        openIndex = NO_GROUP
+        titleView.setText(R.string.settings)
+        list.adapter = groupAdapter
+        scrollToTop(focus)
+    }
+
+    private fun openGroup(index: Int) {
+        val group = groups.getOrNull(index) ?: return
+        openIndex = index
+        titleView.text = group.title
+        settingsAdapter.submit(group.items)
+        list.adapter = settingsAdapter
+        scrollToTop(focus = true)
+    }
+
+    private fun scrollToTop(focus: Boolean) {
+        (list.layoutManager as? LinearLayoutManager)?.scrollToPositionWithOffset(0, 0)
+        if (!focus) return
+        list.post {
+            list.findViewHolderForAdapterPosition(0)?.itemView?.requestFocus() ?: list.requestFocus()
+        }
+    }
+
+    private fun itemCountLabel(count: Int): String =
+        resources.getQuantityString(R.plurals.settings_items_count, count, count)
+
+    private fun SettingsGroup.settingCount(): Int = items.count { it !is SettingItem.Header }
+
+    private fun buildGroups(): List<SettingsGroup> {
+        val result = mutableListOf<SettingsGroup>()
+        fun group(titleId: Int, block: MutableList<SettingItem>.() -> Unit) {
+            val items = mutableListOf<SettingItem>()
+            items.block()
+            result.add(SettingsGroup(getString(titleId), items))
+        }
+
+        group(R.string.general) {
             add(SettingItem.Choice(
                 getString(R.string.language),
                 entries = resources.getStringArray(R.array.language_entries).toList(),
@@ -94,50 +156,9 @@ class SettingsActivity : AppCompatActivity() {
                 get = { prefs.language },
                 set = { prefs.language = it },
             ))
-            add(SettingItem.Choice(
-                getString(R.string.playlists_sorting),
-                entries = sortEntries(),
-                values = sortValues(),
-                get = { prefs.playlistsSorting },
-                set = { prefs.playlistsSorting = it },
-            ))
-            add(SettingItem.Choice(
-                getString(R.string.channels_sorting),
-                getString(R.string.channels_sorting_hint),
-                entries = sortEntries(),
-                values = sortValues(),
-                get = { prefs.channelsSorting },
-                set = { prefs.channelsSorting = it },
-            ))
-            add(SettingItem.Choice(
-                getString(R.string.groups_sorting),
-                getString(R.string.groups_sorting_hint),
-                entries = sortEntries(),
-                values = sortValues(),
-                get = { prefs.groupsSorting },
-                set = { prefs.groupsSorting = it },
-            ))
-            add(SettingItem.Number(
-                getString(R.string.update_interval),
-                min = 1,
-                max = 168,
-                get = { prefs.updateIntervalHours },
-                set = { prefs.updateIntervalHours = it },
-            ))
-            add(SettingItem.Switch(
-                getString(R.string.update_on_app_start),
-                get = { prefs.updateOnStart },
-                set = { prefs.updateOnStart = it },
-            ))
-            add(SettingItem.Switch(
-                getString(R.string.update_on_playlists_change),
-                get = { prefs.updateOnChange },
-                set = { prefs.updateOnChange = it },
-            ))
-
-            startGroup(getString(R.string.appearance))
+            add(SettingItem.Header(getString(R.string.appearance)))
             add(switchItem(R.string.show_clock) { prefs.showClock })
-            add(switchItem(R.string.show_date) { prefs.showClock })
+            add(switchItem(R.string.show_date) { prefs.showDate })
             add(SettingItem.Choice(
                 getString(R.string.clock_position),
                 entries = listOf(
@@ -165,31 +186,108 @@ class SettingsActivity : AppCompatActivity() {
                 set = { prefs.uiTransparency = it },
             ))
             add(switchItem(R.string.animated_transition) { prefs.animatedTransition })
-            add(switchItem(R.string.show_channel_names) { prefs.showChannelNames })
-            add(switchItem(R.string.show_channel_numbers) { prefs.showChannelNumbers })
-            add(switchItem(R.string.two_line_channel_names) { prefs.twoLineChannelNames })
-            add(switchItem(R.string.two_line_program_titles) { prefs.twoLineProgramTitles })
-            add(switchItem(R.string.show_current_programs) { prefs.showCurrentPrograms })
-            add(switchItem(R.string.show_catchup_icon) { prefs.showCatchupIcon })
-            add(switchItem(R.string.show_playlist_and_group_name) { prefs.showPlaylistAndGroupName })
-            add(switchItem(R.string.show_all_channels_category) { prefs.showAllChannelsCategory })
-            add(switchItem(R.string.show_all_playlists_category) { prefs.showAllPlaylistsCategory })
-            add(switchItem(R.string.show_favorites_category) { prefs.showFavoritesCategory })
-            add(switchItem(R.string.show_history_button) { prefs.showHistoryButton })
-            add(switchItem(R.string.show_tv_guide_button) { prefs.showGuideButton })
-            add(switchItem(R.string.highlight_current_channel) { prefs.highlightCurrentChannel })
-            add(switchItem(R.string.highlight_current_programs) { prefs.highlightCurrentPrograms })
-            add(switchItem(R.string.highlight_progress_only) { prefs.highlightProgressOnly })
-            add(switchItem(R.string.dim_past_programs) { prefs.dimPastPrograms })
-            add(switchItem(R.string.show_current_time_indicator) { prefs.showCurrentTimeIndicator })
+            add(SettingItem.Header(getString(R.string.updates)))
+            add(SettingItem.Number(
+                getString(R.string.update_interval),
+                min = 1,
+                max = 168,
+                get = { prefs.updateIntervalHours },
+                set = { prefs.updateIntervalHours = it },
+            ))
+            add(switchItem(R.string.update_on_app_start) { prefs.updateOnStart })
+            add(switchItem(R.string.update_on_playlists_change) { prefs.updateOnChange })
+            add(switchItem(R.string.confirm_exit) { prefs.confirmExit })
+            add(switchItem(R.string.long_back_to_player) { prefs.longBackToPlayer })
+        }
 
-            startGroup(getString(R.string.player))
+        group(R.string.player) {
             add(SettingItem.Choice(
                 getString(R.string.engine),
                 entries = resources.getStringArray(R.array.engine_entries).toList(),
                 values = resources.getStringArray(R.array.engine_values).toList(),
                 get = { prefs.engine },
                 set = { prefs.engine = it },
+            ))
+            add(switchItem(R.string.use_external_player) { prefs.useExternalPlayer })
+            add(SettingItem.Choice(
+                getString(R.string.buffer_size),
+                getString(R.string.buffer_size_hint),
+                entries = resources.getStringArray(R.array.buffer_entries).toList(),
+                values = resources.getStringArray(R.array.buffer_values).toList(),
+                get = { prefs.bufferSizeMs.toString() },
+                set = { prefs.bufferSizeMs = it.toIntOrNull() ?: 5000 },
+            ))
+            add(SettingItem.Header(getString(R.string.video_and_audio)))
+            add(SettingItem.Choice(
+                getString(R.string.video_decoder),
+                getString(R.string.video_decoder_hint),
+                entries = listOf(getString(R.string.hardware), getString(R.string.software)),
+                values = listOf("hardware", "software"),
+                get = { prefs.videoDecoder },
+                set = { prefs.videoDecoder = it },
+            ))
+            add(SettingItem.Choice(
+                getString(R.string.audio_decoder),
+                getString(R.string.audio_decoder_hint),
+                entries = listOf(getString(R.string.hardware), getString(R.string.software)),
+                values = listOf("hardware", "software"),
+                get = { prefs.audioDecoder },
+                set = { prefs.audioDecoder = it },
+            ))
+            add(switchItem(R.string.auto_frame_rate) { prefs.autoFrameRate })
+            add(switchItem(R.string.tunneled_playback) { prefs.tunneledPlayback })
+            add(switchItem(R.string.audio_passthrough) { prefs.audioPassthrough })
+            add(switchItem(R.string.amlogic_fix) { prefs.amlogicFix })
+            add(SettingItem.Header(getString(R.string.seeking)))
+            add(SettingItem.Choice(
+                getString(R.string.skip_step_rw),
+                entries = resources.getStringArray(R.array.skipped_step_entries).toList(),
+                values = resources.getStringArray(R.array.skipped_step_values).toList(),
+                get = { prefs.seekStepRw.toString() },
+                set = { prefs.seekStepRw = it.toIntOrNull() ?: 10 },
+            ))
+            add(SettingItem.Choice(
+                getString(R.string.skip_step_ff),
+                entries = resources.getStringArray(R.array.skipped_step_entries).toList(),
+                values = resources.getStringArray(R.array.skipped_step_values).toList(),
+                get = { prefs.seekStepFf.toString() },
+                set = { prefs.seekStepFf = it.toIntOrNull() ?: 10 },
+            ))
+            add(SettingItem.Choice(
+                getString(R.string.skip_step_tb_back),
+                entries = resources.getStringArray(R.array.skipped_step_entries).toList(),
+                values = resources.getStringArray(R.array.skipped_step_values).toList(),
+                get = { prefs.seekStepBarBack.toString() },
+                set = { prefs.seekStepBarBack = it.toIntOrNull() ?: 30 },
+            ))
+            add(SettingItem.Choice(
+                getString(R.string.skip_step_tb_forward),
+                entries = resources.getStringArray(R.array.skipped_step_entries).toList(),
+                values = resources.getStringArray(R.array.skipped_step_values).toList(),
+                get = { prefs.seekStepBarForward.toString() },
+                set = { prefs.seekStepBarForward = it.toIntOrNull() ?: 30 },
+            ))
+            add(SettingItem.Header(getString(R.string.timeouts)))
+            add(SettingItem.Number(
+                getString(R.string.panels_timeout),
+                min = 1,
+                max = 60,
+                get = { prefs.panelsTimeout },
+                set = { prefs.panelsTimeout = it },
+            ))
+            add(SettingItem.Number(
+                getString(R.string.display_change_timeout),
+                min = 1,
+                max = 60,
+                get = { prefs.displayChangeTimeout },
+                set = { prefs.displayChangeTimeout = it },
+            ))
+            add(SettingItem.Number(
+                getString(R.string.switch_delay),
+                min = 0,
+                max = 30,
+                get = { prefs.switchDelay },
+                set = { prefs.switchDelay = it },
             ))
             add(SettingItem.Number(
                 getString(R.string.switch_desc_lines),
@@ -198,7 +296,20 @@ class SettingsActivity : AppCompatActivity() {
                 get = { prefs.switchDescriptionMaxLines },
                 set = { prefs.switchDescriptionMaxLines = it },
             ))
-            add(SettingItem.Header(getString(R.string.remote_control)))
+            add(SettingItem.Header(getString(R.string.player_interface)))
+            add(switchItem(R.string.show_black_screen) { prefs.showBlackScreen })
+            add(switchItem(R.string.show_info_at_bottom) { prefs.infoAtBottom })
+            add(switchItem(R.string.show_description_when_switching_channels_only) { prefs.showDescriptionOnSwitch })
+            add(switchItem(R.string.overlay_mode) { prefs.overlayMode })
+            add(switchItem(R.string.preview_mode) { prefs.previewMode })
+            add(switchItem(R.string.switch_to_pip_on_home) { prefs.switchToPipOnHome })
+            add(switchItem(R.string.show_media_properties) { prefs.showMediaProperties })
+            add(switchItem(R.string.show_video_resolution) { prefs.showVideoResolution })
+            add(switchItem(R.string.show_cc_all_channels) { prefs.closedCaptions })
+            add(switchItem(R.string.select_surround_track) { prefs.selectSurroundTrack })
+        }
+
+        group(R.string.remote_control) {
             add(SettingItem.Choice(
                 getString(R.string.remote_center),
                 entries = resources.getStringArray(R.array.remote_action_entries).toList(),
@@ -234,99 +345,66 @@ class SettingsActivity : AppCompatActivity() {
                 get = { prefs.remoteDownAction },
                 set = { prefs.remoteDownAction = it },
             ))
-            add(SettingItem.Choice(
-                getString(R.string.buffer_size),
-                getString(R.string.buffer_size_hint),
-                entries = resources.getStringArray(R.array.buffer_entries).toList(),
-                values = resources.getStringArray(R.array.buffer_values).toList(),
-                get = { prefs.bufferSizeMs.toString() },
-                set = { prefs.bufferSizeMs = it.toIntOrNull() ?: 5000 },
-            ))
-            add(SettingItem.Choice(
-                getString(R.string.video_decoder),
-                getString(R.string.video_decoder_hint),
-                entries = listOf(getString(R.string.hardware), getString(R.string.software)),
-                values = listOf("hardware", "software"),
-                get = { prefs.videoDecoder },
-                set = { prefs.videoDecoder = it },
-            ))
-            add(SettingItem.Choice(
-                getString(R.string.audio_decoder),
-                getString(R.string.audio_decoder_hint),
-                entries = listOf(getString(R.string.hardware), getString(R.string.software)),
-                values = listOf("hardware", "software"),
-                get = { prefs.audioDecoder },
-                set = { prefs.audioDecoder = it },
-            ))
-            add(switchItem(R.string.auto_frame_rate) { prefs.autoFrameRate })
-            add(switchItem(R.string.tunneled_playback) { prefs.tunneledPlayback })
-            add(switchItem(R.string.audio_passthrough) { prefs.audioPassthrough })
-            add(switchItem(R.string.amlogic_fix) { prefs.amlogicFix })
-            add(switchItem(R.string.use_external_player) { prefs.useExternalPlayer })
-            add(SettingItem.Choice(
-                getString(R.string.skip_step_rw),
-                entries = resources.getStringArray(R.array.skipped_step_entries).toList(),
-                values = resources.getStringArray(R.array.skipped_step_values).toList(),
-                get = { prefs.seekStepRw.toString() },
-                set = { prefs.seekStepRw = it.toIntOrNull() ?: 10 },
-            ))
-            add(SettingItem.Choice(
-                getString(R.string.skip_step_ff),
-                entries = resources.getStringArray(R.array.skipped_step_entries).toList(),
-                values = resources.getStringArray(R.array.skipped_step_values).toList(),
-                get = { prefs.seekStepFf.toString() },
-                set = { prefs.seekStepFf = it.toIntOrNull() ?: 10 },
-            ))
-            add(SettingItem.Choice(
-                getString(R.string.skip_step_tb_back),
-                entries = resources.getStringArray(R.array.skipped_step_entries).toList(),
-                values = resources.getStringArray(R.array.skipped_step_values).toList(),
-                get = { prefs.seekStepBarBack.toString() },
-                set = { prefs.seekStepBarBack = it.toIntOrNull() ?: 30 },
-            ))
-            add(SettingItem.Choice(
-                getString(R.string.skip_step_tb_forward),
-                entries = resources.getStringArray(R.array.skipped_step_entries).toList(),
-                values = resources.getStringArray(R.array.skipped_step_values).toList(),
-                get = { prefs.seekStepBarForward.toString() },
-                set = { prefs.seekStepBarForward = it.toIntOrNull() ?: 30 },
-            ))
-            add(SettingItem.Number(
-                getString(R.string.panels_timeout),
-                min = 1,
-                max = 60,
-                get = { prefs.panelsTimeout },
-                set = { prefs.panelsTimeout = it },
-            ))
-            add(SettingItem.Number(
-                getString(R.string.display_change_timeout),
-                min = 1,
-                max = 60,
-                get = { prefs.displayChangeTimeout },
-                set = { prefs.displayChangeTimeout = it },
-            ))
-            add(SettingItem.Number(
-                getString(R.string.switch_delay),
-                min = 0,
-                max = 30,
-                get = { prefs.switchDelay },
-                set = { prefs.switchDelay = it },
-            ))
-            add(switchItem(R.string.show_black_screen) { prefs.showBlackScreen })
-            add(switchItem(R.string.show_info_at_bottom) { prefs.infoAtBottom })
-            add(switchItem(R.string.show_description_when_switching_channels_only) { prefs.showDescriptionOnSwitch })
+        }
+
+        group(R.string.home_screen) {
+            add(switchItem(R.string.show_channel_names) { prefs.showChannelNames })
+            add(switchItem(R.string.show_channel_numbers) { prefs.showChannelNumbers })
+            add(switchItem(R.string.two_line_channel_names) { prefs.twoLineChannelNames })
+            add(switchItem(R.string.two_line_program_titles) { prefs.twoLineProgramTitles })
+            add(switchItem(R.string.show_current_programs) { prefs.showCurrentPrograms })
+            add(switchItem(R.string.show_catchup_icon) { prefs.showCatchupIcon })
+            add(switchItem(R.string.show_playlist_and_group_name) { prefs.showPlaylistAndGroupName })
+            add(switchItem(R.string.show_all_channels_category) { prefs.showAllChannelsCategory })
+            add(switchItem(R.string.show_all_playlists_category) { prefs.showAllPlaylistsCategory })
+            add(switchItem(R.string.show_favorites_category) { prefs.showFavoritesCategory })
+            add(switchItem(R.string.show_history_button) { prefs.showHistoryButton })
+            add(switchItem(R.string.show_tv_guide_button) { prefs.showGuideButton })
+            add(SettingItem.Header(getString(R.string.markers)))
+            add(switchItem(R.string.highlight_current_channel) { prefs.highlightCurrentChannel })
+            add(switchItem(R.string.highlight_current_programs) { prefs.highlightCurrentPrograms })
+            add(switchItem(R.string.highlight_progress_only) { prefs.highlightProgressOnly })
+            add(switchItem(R.string.dim_past_programs) { prefs.dimPastPrograms })
+            add(switchItem(R.string.show_current_time_indicator) { prefs.showCurrentTimeIndicator })
+            add(SettingItem.Header(getString(R.string.navigation)))
             add(switchItem(R.string.stay_on_list) { prefs.stayOnList })
             add(switchItem(R.string.stay_on_guide) { prefs.stayOnGuide })
             add(switchItem(R.string.stay_on_search) { prefs.stayOnSearch })
-            add(switchItem(R.string.overlay_mode) { prefs.overlayMode })
-            add(switchItem(R.string.preview_mode) { prefs.previewMode })
-            add(switchItem(R.string.switch_to_pip_on_home) { prefs.switchToPipOnHome })
-            add(switchItem(R.string.show_media_properties) { prefs.showMediaProperties })
-            add(switchItem(R.string.show_video_resolution) { prefs.showVideoResolution })
-            add(switchItem(R.string.show_cc_all_channels) { prefs.closedCaptions })
-            add(switchItem(R.string.select_surround_track) { prefs.selectSurroundTrack })
+        }
 
-            startGroup(getString(R.string.epg))
+        group(R.string.playlists_and_channels) {
+            add(SettingItem.Header(getString(R.string.sorting)))
+            add(SettingItem.Choice(
+                getString(R.string.playlists_sorting),
+                entries = sortEntries(),
+                values = sortValues(),
+                get = { prefs.playlistsSorting },
+                set = { prefs.playlistsSorting = it },
+            ))
+            add(SettingItem.Choice(
+                getString(R.string.channels_sorting),
+                getString(R.string.channels_sorting_hint),
+                entries = sortEntries(),
+                values = sortValues(),
+                get = { prefs.channelsSorting },
+                set = { prefs.channelsSorting = it },
+            ))
+            add(SettingItem.Choice(
+                getString(R.string.groups_sorting),
+                getString(R.string.groups_sorting_hint),
+                entries = sortEntries(),
+                values = sortValues(),
+                get = { prefs.groupsSorting },
+                set = { prefs.groupsSorting = it },
+            ))
+            add(SettingItem.Action(getString(R.string.add_playlist)) {
+                startActivity(android.content.Intent(this@SettingsActivity, PlaylistWizardActivity::class.java))
+            })
+            add(SettingItem.Action(getString(R.string.channel_names_editor)) { editChannelNames() })
+            add(SettingItem.Action(getString(R.string.clear_logos_cache)) { clearLogos() })
+        }
+
+        group(R.string.epg) {
             add(SettingItem.Number(
                 getString(R.string.epg_offset),
                 min = -12,
@@ -346,14 +424,9 @@ class SettingsActivity : AppCompatActivity() {
             add(SettingItem.Action(getString(R.string.epg_sources)) { showEpgSources() })
             add(SettingItem.Action(getString(R.string.update_epg)) { updateEpg() })
             add(SettingItem.Action(getString(R.string.clear_epg)) { clearEpg() })
+        }
 
-            startGroup(getString(R.string.other))
-            add(switchItem(R.string.auto_start_on_boot) { prefs.autoStartOnBoot })
-            add(switchItem(R.string.auto_start_on_wake, R.string.auto_start_on_wake_hint) { prefs.autoStartOnWake })
-            add(switchItem(R.string.turn_on_last_channel) { prefs.turnOnLastChannel })
-            add(switchItem(R.string.autoplay_channels) { prefs.autoplayChannels })
-            add(switchItem(R.string.confirm_exit) { prefs.confirmExit })
-            add(switchItem(R.string.long_back_to_player) { prefs.longBackToPlayer })
+        group(R.string.history) {
             add(SettingItem.Number(
                 getString(R.string.history_delay),
                 min = 0,
@@ -376,46 +449,51 @@ class SettingsActivity : AppCompatActivity() {
                 set = { prefs.historyDayCount = it },
             ))
             add(SettingItem.Action(getString(R.string.reset_watch_time)) { resetWatchTime() })
-            add(SettingItem.Action(getString(R.string.channel_names_editor)) { editChannelNames() })
-            add(SettingItem.Action(getString(R.string.clear_logos_cache)) { clearLogos() })
+        }
+
+        group(R.string.startup) {
+            add(switchItem(R.string.auto_start_on_boot) { prefs.autoStartOnBoot })
+            add(switchItem(R.string.auto_start_on_wake, R.string.auto_start_on_wake_hint) { prefs.autoStartOnWake })
+            add(switchItem(R.string.turn_on_last_channel) { prefs.turnOnLastChannel })
+            add(switchItem(R.string.autoplay_channels) { prefs.autoplayChannels })
+        }
+
+        group(R.string.data) {
             add(SettingItem.Action(getString(R.string.pin_code), getString(R.string.pin_code_hint)) {
                 PinGate.changePin(this@SettingsActivity)
             })
             add(SettingItem.Action(getString(R.string.back_up_data)) { backup() })
             add(SettingItem.Action(getString(R.string.restore_data)) { restore() })
-            add(SettingItem.Action(getString(R.string.add_playlist)) {
-                startActivity(android.content.Intent(this@SettingsActivity, PlaylistWizardActivity::class.java))
-            })
+        }
 
-            startGroup(getString(R.string.about))
+        group(R.string.about) {
             add(SettingItem.Value(getString(R.string.version), appVersion()))
             add(SettingItem.Action(getString(R.string.check_for_new_version)) {
                 toast(getString(R.string.no_new_version))
             })
             add(SettingItem.Action(getString(R.string.exit)) { finishAffinity() })
         }
-        settingsAdapter.submit(flatItems)
-        groupAdapter.submit(groups.map { it.title })
-        statusView.text = getString(R.string.app_name) + " " + appVersion()
+
+        return result
     }
 
     private fun switchItem(titleId: Int, getter: () -> Boolean): SettingItem.Switch =
         SettingItem.Switch(getString(titleId), get = getter, set = { newValue ->
-            when (titleId) {
-                R.string.show_clock -> prefs.showClock = newValue
-                else -> getterSetterMap(titleId, getter, newValue)
-            }
+            getterSetterMap(titleId, newValue)
         })
 
     private fun switchItem(titleId: Int, summaryId: Int, getter: () -> Boolean): SettingItem.Switch =
         SettingItem.Switch(getString(titleId), getString(summaryId), get = getter, set = {
-            getterSetterMap(titleId, getter, it)
+            getterSetterMap(titleId, it)
         })
 
-    private fun getterSetterMap(titleId: Int, getter: () -> Boolean, value: Boolean) {
+    private fun getterSetterMap(titleId: Int, value: Boolean) {
         when (titleId) {
+            R.string.show_clock -> prefs.showClock = value
             R.string.show_date -> prefs.showDate = value
             R.string.animated_transition -> prefs.animatedTransition = value
+            R.string.update_on_app_start -> prefs.updateOnStart = value
+            R.string.update_on_playlists_change -> prefs.updateOnChange = value
             R.string.show_channel_names -> prefs.showChannelNames = value
             R.string.show_channel_numbers -> prefs.showChannelNumbers = value
             R.string.two_line_channel_names -> prefs.twoLineChannelNames = value
@@ -536,7 +614,7 @@ class SettingsActivity : AppCompatActivity() {
                         toast(getString(R.string.reminder_is_deleted))
                     }
                 }
-                showRoot()
+                rebuild()
             }
         }
     }
@@ -558,10 +636,10 @@ class SettingsActivity : AppCompatActivity() {
             onOk = { url, _ ->
                 if (url.isBlank()) return@input
                 TvBroApp.repo(this).insertEpgSource(
-                    com.tvibro.data.model.EpgSource(name = name, url = url, playlistId = playlistId)
+                    EpgSource(name = name, url = url, playlistId = playlistId)
                 )
                 toast(getString(R.string.epg_source_added))
-                showRoot()
+                rebuild()
             }
         )
     }
@@ -571,7 +649,9 @@ class SettingsActivity : AppCompatActivity() {
         dialog.show()
         TvBroApp.get().sources.refreshAllEpg { count ->
             dialog.dismiss()
-            toast(getString(R.string.epg_updated, count, ""))
+            if (!isFinishing && !isDestroyed) {
+                toast(getString(R.string.epg_updated, count, ""))
+            }
         }
     }
 
@@ -582,8 +662,9 @@ class SettingsActivity : AppCompatActivity() {
             getString(R.string.delete_all_programs),
             getString(R.string.delete)
         ) {
-            TvBroApp.get().sources.pruneOldPrograms(0)
-            toast(getString(R.string.settings_saved))
+            TvBroApp.get().sources.pruneOldPrograms(0) {
+                toast(getString(R.string.settings_saved))
+            }
         }
     }
 
@@ -688,7 +769,9 @@ class SettingsActivity : AppCompatActivity() {
         packageManager.getPackageInfo(packageName, 0).versionName
     }.getOrNull() ?: "1.0"
 
-    @Suppress("unused")
-    private fun formattedDate(time: Long): String =
-        SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault()).format(java.util.Date(time))
+    companion object {
+        private const val NO_GROUP = -1
+        private const val ENTER_MS = 220L
+        private const val EXIT_MS = 180L
+    }
 }

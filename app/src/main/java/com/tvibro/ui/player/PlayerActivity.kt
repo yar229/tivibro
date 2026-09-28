@@ -29,6 +29,7 @@ import coil.load
 import com.tvibro.R
 import com.tvibro.TvBroApp
 import com.tvibro.base.Fmt
+import com.tvibro.base.startActivitySafely
 import com.tvibro.base.toast
 import com.tvibro.base.visible
 import com.tvibro.data.Prefs
@@ -39,6 +40,7 @@ import com.tvibro.data.model.Playlist
 import com.tvibro.data.model.Program
 import com.tvibro.data.source.CatchupResolver
 import com.tvibro.ui.common.Dialogs
+import com.tvibro.ui.settings.SettingsActivity
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -220,10 +222,7 @@ private var watchTimeMs = 0L
         switchNextProgram = findViewById(R.id.switch_next_program)
 
         sideChannelAdapter = SideChannelAdapter(
-            onClick = { ch ->
-                hideSideChannels()
-                loadChannel(ch.id)
-            },
+            onClick = { ch -> selectSideChannel(ch.id) },
             onFocus = { ch -> updateSideProgramDetails(ch.id) },
         )
 sideChannelsList = findViewById(R.id.side_channels_list)
@@ -259,10 +258,10 @@ sideChannelsList = findViewById(R.id.side_channels_list)
     private fun buildPanelButtons() {
         panelButtons.removeAllViews()
         val buttons = listOf(
+            PanelButton(R.drawable.ic_close, R.string.close) { dismissPanels() },
             PanelButton(R.drawable.ic_rewind, R.string.action_rewind) { seekRelative(-prefs.seekStepRw) },
             PanelButton(R.drawable.ic_play, R.string.play_pause) { togglePlay() },
             PanelButton(R.drawable.ic_ffwd, R.string.action_fast_forward) { seekRelative(prefs.seekStepFf) },
-            PanelButton(R.drawable.ic_volume_up, R.string.volume_up) { changeVolume(0.1f) },
             PanelButton(R.drawable.ic_info, R.string.show_info_panel) { showInfo() },
             PanelButton(R.drawable.ic_timer, R.string.sleep_timer) { showSleepTimer() },
             PanelButton(R.drawable.ic_aspect, R.string.aspect_ratio) {
@@ -271,6 +270,7 @@ sideChannelsList = findViewById(R.id.side_channels_list)
             PanelButton(R.drawable.ic_catchup, R.string.catchup) { showCatchup() },
             PanelButton(R.drawable.ic_star, R.string.add_to_favorites) { toggleFavorite() },
             PanelButton(R.drawable.ic_stop, R.string.stop_playback) { stopPlayback() },
+            PanelButton(R.drawable.ic_settings, R.string.nav_settings) { openSettings() },
         )
         buttons.forEach { button ->
             val view = LayoutInflater.from(this).inflate(R.layout.item_player_button, panelButtons, false)
@@ -575,7 +575,7 @@ sideChannelsList = findViewById(R.id.side_channels_list)
 
         if (prefs.showInfoOnSwitch) {
             switchPanel.visible(true)
-            switchPanel.requestFocus()
+            if (!sideChannelsVisible) switchPanel.requestFocus()
             if (prefs.showDescriptionOnSwitch) updateInfoPanel()
             switchTimeout = System.currentTimeMillis() + (prefs.displayChangeTimeout * 1000L)
         }
@@ -725,6 +725,19 @@ sideChannelsList = findViewById(R.id.side_channels_list)
         root.requestFocus()
     }
 
+    // Single entry point for picking a channel from the side list. Both the
+    // adapter click and the DPAD_CENTER handler route here, so the list can only
+    // be closed in one place. Safe to call twice for the same channel: the
+    // second call sees it as current and does not reload.
+    private fun selectSideChannel(channelId: Long) {
+        if (channelId != (channel?.id ?: requestedChannelId)) {
+            loadChannel(channelId)
+        }
+        if (!prefs.stayOnList) {
+            hideSideChannels()
+        }
+    }
+
     private fun hidePanels() {
         panelTimeout = 0
         osdHeader.visible(false)
@@ -732,6 +745,11 @@ sideChannelsList = findViewById(R.id.side_channels_list)
         infoPanel.visible(false)
         switchPanel.visible(false)
         switchTimeout = 0
+    }
+
+    private fun dismissPanels() {
+        hidePanels()
+        root.requestFocus()
     }
 
     private fun showInfo() {
@@ -996,6 +1014,11 @@ sideChannelsList = findViewById(R.id.side_channels_list)
         finish()
     }
 
+    private fun openSettings() {
+        saveWatchTime()
+        startActivitySafely(Intent(this, SettingsActivity::class.java))
+    }
+
     private fun nextChannel() {
         stepChannel(1)
     }
@@ -1097,11 +1120,7 @@ sideChannelsList = findViewById(R.id.side_channels_list)
                 if (sideChannelsVisible) {
                     val holder = sideChannelsList.findFocus() as? SideChannelAdapter.Holder
                     val position = holder?.bindingAdapterPosition ?: RecyclerView.NO_POSITION
-                    val channel = sideChannelAdapter.getChannel(position)
-                    if (channel != null) {
-                        hideSideChannels()
-                        loadChannel(channel.id)
-                    }
+                    sideChannelAdapter.getChannel(position)?.let { selectSideChannel(it.id) }
                     return true
                 }
                 if (isFocusInsideOsd()) {

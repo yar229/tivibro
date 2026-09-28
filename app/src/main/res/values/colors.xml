@@ -27,6 +27,7 @@
     <color name="text_on_primary">#FFFFFFFF</color>
 
     <color name="scrim">#B3000000</color>
+    <color name="scrim_soft">#66000000</color>
     <color name="panel">#CC0F141B</color>
     <color name="panel_solid">#FF0F141B</color>
     <color name="divider">#33FFFFFF</color>

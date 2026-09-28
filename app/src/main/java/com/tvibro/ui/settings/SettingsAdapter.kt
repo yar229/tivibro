@@ -83,8 +83,6 @@ class SettingsAdapter(
             return
         }
         holder as ItemHolder
-        val context = holder.itemView.context
-        holder.itemView.nextFocusLeftId = R.id.settings_groups
         holder.title.text = item.title
         holder.summary.visible(item.summarySafe().isNotEmpty())
         holder.summary.text = item.summarySafe()

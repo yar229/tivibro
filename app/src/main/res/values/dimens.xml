@@ -13,6 +13,8 @@
     <dimen name="epg_logo_h">48dp</dimen>
     <dimen name="card_size">128dp</dimen>
 
+    <dimen name="settings_panel_width">640dp</dimen>
+    <dimen name="panel_elevation">8dp</dimen>
     <dimen name="header_height">56dp</dimen>
     <dimen name="bottom_nav_height">64dp</dimen>
     <dimen name="player_controls_height">60dp</dimen>

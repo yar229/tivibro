@@ -814,4 +814,23 @@
     <string name="channel_logo">Channel logo</string>
     <string name="app_logo">App logo</string>
     <string name="switch_desc_lines">Max lines of program description in info popup</string>
+    <!-- Settings groups -->
+    <string name="home_screen">Home screen</string>
+    <string name="playlists_and_channels">Playlists and channels</string>
+    <string name="history">History</string>
+    <string name="startup">Startup</string>
+    <string name="data">Data and security</string>
+    <string name="updates">Updates</string>
+    <string name="video_and_audio">Video and audio</string>
+    <string name="seeking">Seeking</string>
+    <string name="timeouts">Timeouts and delays</string>
+    <string name="player_interface">Player interface</string>
+    <string name="markers">Highlighting</string>
+    <string name="navigation">Navigation</string>
+    <plurals name="settings_items_count">
+        <item quantity="one">%d item</item>
+        <item quantity="few">%d items</item>
+        <item quantity="many">%d items</item>
+        <item quantity="other">%d items</item>
+    </plurals>
 </resources>

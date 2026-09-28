@@ -1,6 +1,8 @@
 package com.tvibro.data.source
 
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
 import com.tvibro.data.db.TvBroRepository
 import com.tvibro.data.model.Channel
 import com.tvibro.data.model.ChannelFilter
@@ -17,8 +19,15 @@ class SourceManager(context: Context) {
     private val repo = TvBroRepository.get(context)
     private val executor = Executors.newSingleThreadExecutor { r -> Thread(r, "tvibro-update").apply { isDaemon = true } }
     private val running = AtomicBoolean(false)
+    private val main = Handler(Looper.getMainLooper())
 
     val isRunning: Boolean get() = running.get()
+
+    // Work runs on the update thread, callbacks are always delivered on the main
+    // thread so callers can touch dialogs, toasts and adapters directly.
+    private fun onMain(action: () -> Unit) {
+        if (Looper.myLooper() == Looper.getMainLooper()) action() else main.post(action)
+    }
 
     // ------------------------------------------------------------- playlists
 
@@ -43,7 +52,7 @@ class SourceManager(context: Context) {
                 programs.size to stored.size
             }
             running.set(false)
-            onDone(result)
+            onMain { onDone(result) }
         }
     }
 
@@ -66,10 +75,10 @@ class SourceManager(context: Context) {
                     errors++
                     lastError = e.message
                 }
-                onProgress(index + 1, playlists.size)
+                onMain { onProgress(index + 1, playlists.size) }
             }
             running.set(false)
-            onDone(if (errors > 0) "$errors playlist(s) failed: $lastError" else null)
+            onMain { onDone(if (errors > 0) "$errors playlist(s) failed: $lastError" else null) }
         }
     }
 
@@ -129,7 +138,7 @@ class SourceManager(context: Context) {
             val playlist = repo.playlist(playlistId)
             val count = if (playlist == null) 0 else loadEpgFor(playlist).values.sumOf { it.size }
             running.set(false)
-            onDone(count)
+            onMain { onDone(count) }
         }
     }
 
@@ -141,14 +150,15 @@ class SourceManager(context: Context) {
                 total += loadEpgFor(playlist).values.sumOf { it.size }
             }
             running.set(false)
-            onDone(total)
+            onMain { onDone(total) }
         }
     }
 
-    fun pruneOldPrograms(days: Int) {
+    fun pruneOldPrograms(days: Int, onDone: (() -> Unit)? = null) {
         executor.execute {
             val cutoff = System.currentTimeMillis() - days * 24 * 3600_000L
             repo.clearProgramsBefore(cutoff)
+            if (onDone != null) onMain { onDone() }
         }
     }
 
@@ -173,9 +183,9 @@ class SourceManager(context: Context) {
                 val playlist = Playlist(name = name, type = PlaylistType.FILE, url = path, lastUpdate = System.currentTimeMillis())
                 val id = repo.insertPlaylist(playlist)
                 repo.replaceChannels(id, parsed.channels)
-                onDone(id)
+                onMain { onDone(id) }
             } catch (e: Exception) {
-                onError(e)
+                onMain { onError(e) }
             }
         }
     }
@@ -191,9 +201,9 @@ class SourceManager(context: Context) {
                 )
                 val id = repo.insertPlaylist(playlist)
                 repo.replaceChannels(id, parsed.channels)
-                onDone(id, parsed.channels.size)
+                onMain { onDone(id, parsed.channels.size) }
             } catch (e: Exception) {
-                onError(e)
+                onMain { onError(e) }
             }
         }
     }
@@ -213,9 +223,9 @@ class SourceManager(context: Context) {
                 )
                 val id = repo.insertPlaylist(playlist)
                 repo.replaceChannels(id, channels)
-                onDone(id, channels.size)
+                onMain { onDone(id, channels.size) }
             } catch (e: Exception) {
-                onError(e)
+                onMain { onError(e) }
             }
         }
     }

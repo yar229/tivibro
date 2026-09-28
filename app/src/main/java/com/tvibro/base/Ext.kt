@@ -2,6 +2,8 @@ package com.tvibro.base
 
 import android.content.Context
 import android.content.Intent
+import android.os.Handler
+import android.os.Looper
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
@@ -143,7 +145,12 @@ object Fmt {
 }
 
 fun Context.toast(message: String, long: Boolean = false) {
-    Toast.makeText(this, message, if (long) Toast.LENGTH_LONG else Toast.LENGTH_SHORT).show()
+    val duration = if (long) Toast.LENGTH_LONG else Toast.LENGTH_SHORT
+    if (Looper.myLooper() == Looper.getMainLooper()) {
+        Toast.makeText(this, message, duration).show()
+    } else {
+        Handler(Looper.getMainLooper()).post { Toast.makeText(this, message, duration).show() }
+    }
 }
 
 fun Context.toastRes(id: Int) = toast(getString(id))

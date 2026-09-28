@@ -1,24 +1,49 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/group_root"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:minHeight="52dp"
-    android:gravity="center_vertical"
-    android:orientation="horizontal"
-    android:paddingStart="@dimen/spacing_lg"
-    android:paddingEnd="@dimen/spacing_lg"
     android:background="@drawable/bg_row"
     android:focusable="true"
     android:focusableInTouchMode="true"
-    android:nextFocusRight="@id/settings_list">
+    android:gravity="center_vertical"
+    android:minHeight="64dp"
+    android:orientation="horizontal"
+    android:paddingStart="@dimen/spacing_lg"
+    android:paddingEnd="@dimen/spacing_lg">
 
-    <TextView
-        android:id="@+id/group_title"
-        style="@style/TvBro.Text.Title"
-        android:layout_width="match_parent"
+    <LinearLayout
+        android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:textSize="@dimen/text_sm"
-        tools:text="General" />
+        android:layout_weight="1"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/group_title"
+            style="@style/TvBro.Text.Title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:textSize="@dimen/text_lg"
+            tools:text="Player" />
+
+        <TextView
+            android:id="@+id/group_count"
+            style="@style/TvBro.Text.Time"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            tools:text="24" />
+    </LinearLayout>
+
+    <ImageView
+        android:id="@+id/group_chevron"
+        android:layout_width="@dimen/icon_md"
+        android:layout_height="@dimen/icon_md"
+        android:layout_marginStart="@dimen/spacing_md"
+        android:contentDescription="@null"
+        android:src="@drawable/ic_chevron_right"
+        app:tint="@color/text_secondary" />
 </LinearLayout>
