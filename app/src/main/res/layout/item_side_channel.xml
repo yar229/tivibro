@@ -11,7 +11,7 @@
     android:background="@drawable/bg_row"
     android:focusable="true"
     android:focusableInTouchMode="true"
-    android:nextFocusRight="@id/player_root">
+    android:nextFocusRight="@id/side_schedule_list">
 
     <ImageView
         android:id="@+id/side_channel_logo"

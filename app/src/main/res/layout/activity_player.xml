@@ -43,6 +43,8 @@
                 style="@style/TvBro.Text.Title"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:maxLines="2"
                 android:textSize="@dimen/text_lg"
                 tools:text="Форт. Возвращение легенды. 1 с." />
 
@@ -61,19 +63,42 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="@dimen/spacing_md"
+                android:ellipsize="end"
+                android:maxLines="4"
                 android:textSize="@dimen/text_sm"
                 tools:text="Шесть звездных участников пройдут ряд испытаний..." />
 
             <TextView
-                android:id="@+id/side_program_next"
+                android:id="@+id/side_schedule_header"
                 style="@style/TvBro.Text.Time"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="@dimen/spacing_md"
-                android:textSize="@dimen/text_sm"
-                android:visibility="gone"
-                tools:text="Далее: 22:45 — 23:30  Новости"
-                tools:visibility="visible" />
+                android:layout_marginTop="@dimen/spacing_lg"
+                android:text="@string/tv_guide"
+                android:textSize="@dimen/text_xs" />
+
+            <TextView
+                android:id="@+id/side_schedule_empty"
+                style="@style/TvBro.Text.Subtitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_xs"
+                android:text="@string/no_programs"
+                android:textSize="@dimen/text_xs"
+                android:visibility="gone" />
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/side_schedule_list"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_marginTop="@dimen/spacing_xs"
+                android:layout_weight="1"
+                android:clipToPadding="false"
+                android:descendantFocusability="afterDescendants"
+                android:focusable="false"
+                android:focusableInTouchMode="false"
+                android:nextFocusLeft="@id/side_channels_list"
+                android:scrollbars="none" />
         </LinearLayout>
     </LinearLayout>
 

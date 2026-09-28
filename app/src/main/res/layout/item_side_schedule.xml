@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@drawable/bg_side_schedule_row"
+    android:focusable="true"
+    android:focusableInTouchMode="true"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:paddingStart="@dimen/spacing_xs"
+    android:paddingTop="@dimen/spacing_xs"
+    android:paddingEnd="@dimen/spacing_xs"
+    android:paddingBottom="@dimen/spacing_xs">
+
+    <TextView
+        android:id="@+id/side_schedule_time"
+        style="@style/TvBro.Text.Time"
+        android:layout_width="88dp"
+        android:layout_height="wrap_content"
+        android:textSize="@dimen/text_xxs"
+        tools:text="21:05 — 22:45" />
+
+    <TextView
+        android:id="@+id/side_schedule_title"
+        style="@style/TvBro.Text.Subtitle"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="@dimen/spacing_sm"
+        android:layout_weight="1"
+        android:ellipsize="end"
+        android:maxLines="2"
+        android:textSize="@dimen/text_xs"
+        tools:text="Форт. Возвращение легенды" />
+</LinearLayout>

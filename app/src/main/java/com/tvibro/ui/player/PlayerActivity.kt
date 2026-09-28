@@ -77,7 +77,13 @@ class PlayerActivity : AppCompatActivity() {
     private lateinit var sideProgramTitle: TextView
     private lateinit var sideProgramTime: TextView
     private lateinit var sideProgramDescription: TextView
-    private lateinit var sideProgramNext: TextView
+    private lateinit var sideScheduleList: RecyclerView
+    private lateinit var sideScheduleEmpty: TextView
+    private lateinit var sideScheduleAdapter: SideScheduleAdapter
+    private var sideScheduleChannelId = -1L
+    private var sideFocusedChannelId = -1L
+    private var sideChannelPosition = 0
+    private var sideSchedulePosition = 0
     private var sideChannelsLoaded = false
     private lateinit var osdHeader: View
     private lateinit var osdLogo: ImageView
@@ -235,7 +241,11 @@ sideChannelsList = findViewById(R.id.side_channels_list)
         sideProgramTitle = findViewById(R.id.side_program_title)
         sideProgramTime = findViewById(R.id.side_program_time)
         sideProgramDescription = findViewById(R.id.side_program_description)
-        sideProgramNext = findViewById(R.id.side_program_next)
+        sideScheduleList = findViewById(R.id.side_schedule_list)
+        sideScheduleEmpty = findViewById(R.id.side_schedule_empty)
+        sideScheduleAdapter = SideScheduleAdapter()
+        sideScheduleList.layoutManager = LinearLayoutManager(this)
+        sideScheduleList.adapter = sideScheduleAdapter
 
         osdHeader = findViewById(R.id.osd_header)
         osdLogo = findViewById(R.id.osd_logo)
@@ -480,6 +490,10 @@ sideChannelsList = findViewById(R.id.side_channels_list)
       // Keep the EPG progress bars in the channel list moving while it stays open.
       if (sideChannelsVisible && now - lastSideProgramsAt > SIDE_PROGRAMS_REFRESH_MS) {
         refreshSidePrograms()
+        if (sideFocusedChannelId > 0) {
+          updateSideProgramDetails(sideFocusedChannelId)
+          sideScheduleAdapter.refreshNow()
+        }
       }
       main.postDelayed(this, 1000L)
             }
@@ -634,12 +648,19 @@ sideChannelsList = findViewById(R.id.side_channels_list)
     }
 
     private fun updateSideProgramDetails(channelId: Long) {
+        val needSchedule = channelId != sideScheduleChannelId
         executor.execute {
             val ch = repo.channel(channelId) ?: return@execute
             val prog = repo.currentProgram(channelId)
             val now = System.currentTimeMillis()
-            val next = repo.programsFor(channelId, prog?.stop ?: now, now + 12 * 3600_000L).firstOrNull()
+            val schedule = if (needSchedule) {
+                repo.programsFor(channelId, now - 6 * 3600_000L, now + 12 * 3600_000L)
+                    .filter { it.stop > now }
+            } else {
+                null
+            }
             main.post {
+                sideFocusedChannelId = channelId
                 sideProgramTitle.text = prog?.title ?: ch.name
                 sideProgramTime.text = if (prog != null) {
                     "${Fmt.time(prog.start)} — ${Fmt.time(prog.stop)} · ${Fmt.remainingText(prog.stop, now)}"
@@ -649,11 +670,11 @@ sideChannelsList = findViewById(R.id.side_channels_list)
                 val description = Fmt.shortDescription(prog?.description, maxChars = 500)
                 sideProgramDescription.text = description
                 sideProgramDescription.visible(description.isNotEmpty())
-                if (next != null) {
-                    sideProgramNext.text = "${getString(R.string.next_program)}: ${Fmt.time(next.start)} — ${Fmt.time(next.stop)}  ${next.title}"
-                    sideProgramNext.visible(true)
-                } else {
-                    sideProgramNext.visible(false)
+                if (schedule != null) {
+                    sideScheduleChannelId = channelId
+                    sideScheduleAdapter.submit(schedule)
+                    sideScheduleList.visible(schedule.isNotEmpty())
+                    sideScheduleEmpty.visible(schedule.isEmpty())
                 }
             }
         }
@@ -711,6 +732,7 @@ sideChannelsList = findViewById(R.id.side_channels_list)
         sideContainer.visible(true)
         val currentChannelId = channel?.id ?: requestedChannelId
         sideChannelAdapter.setSelected(currentChannelId)
+        sideScheduleChannelId = -1L
         sideChannelsList.post {
             val index = sideChannelAdapter.indexOf(currentChannelId)
             val target = if (index >= 0) index else 0
@@ -729,11 +751,43 @@ sideChannelsList = findViewById(R.id.side_channels_list)
         val holder = sideChannelsList.findViewHolderForAdapterPosition(position)
         if (holder != null) {
             holder.itemView.requestFocus()
+            sideChannelPosition = position
             sideChannelAdapter.getChannel(position)?.let { updateSideProgramDetails(it.id) }
         } else if (attemptsLeft > 0) {
             sideChannelsList.post { focusSideChannel(position, attemptsLeft - 1) }
         }
     }
+
+    private fun focusSideSchedule() {
+        if (sideScheduleList.visibility != View.VISIBLE) {
+            hideSideChannels()
+            return
+        }
+        sideChannelPosition = focusedPosition(sideChannelsList, sideChannelPosition)
+        focusSideScheduleRow(sideSchedulePosition)
+    }
+
+    private fun focusSideScheduleRow(position: Int, attemptsLeft: Int = 5) {
+        if (sideScheduleList.hasPendingAdapterUpdates()) {
+            if (attemptsLeft > 0) {
+                sideScheduleList.post { focusSideScheduleRow(position, attemptsLeft - 1) }
+            }
+            return
+        }
+        val holder = sideScheduleList.findViewHolderForAdapterPosition(position)
+        if (holder != null) {
+            holder.itemView.requestFocus()
+            sideSchedulePosition = position
+        } else if (attemptsLeft > 0) {
+            sideScheduleList.post { focusSideScheduleRow(position, attemptsLeft - 1) }
+        }
+    }
+
+    private fun focusedPosition(list: RecyclerView, fallback: Int): Int =
+        list.focusedChild
+            ?.let { list.getChildAdapterPosition(it) }
+            ?.takeIf { it != RecyclerView.NO_POSITION }
+            ?: fallback
 
     private fun hideSideChannels() {
         if (!::sideContainer.isInitialized) return
@@ -1151,7 +1205,12 @@ sideChannelsList = findViewById(R.id.side_channels_list)
             }
             KeyEvent.KEYCODE_DPAD_LEFT -> {
                 if (sideChannelsVisible) {
-                    hideSideChannels()
+                    if (sideScheduleList.hasFocus()) {
+                        sideSchedulePosition = focusedPosition(sideScheduleList, sideSchedulePosition)
+                        focusSideChannel(sideChannelPosition)
+                    } else {
+                        hideSideChannels()
+                    }
                     return true
                 }
                 if (osdPanel.visibility == View.VISIBLE) {
@@ -1173,7 +1232,7 @@ sideChannelsList = findViewById(R.id.side_channels_list)
             }
             KeyEvent.KEYCODE_DPAD_RIGHT -> {
                 if (sideChannelsVisible) {
-                    hideSideChannels()
+                    focusSideSchedule()
                     return true
                 }
                 if (osdPanel.visibility == View.VISIBLE) {
