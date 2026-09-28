@@ -379,6 +379,12 @@
     <string name="update_epg">Update EPG</string>
     <string name="epg_updated">EPG is successfully updated for %1$d channels on %2$s</string>
     <string name="epg_update_failed">Failed to update EPG from "%1$s" at %2$s. Make sure EPG URL is correct and check your Internet connection.</string>
+    <string name="epg_update_started">EPG update started</string>
+    <string name="epg_update_source">Source: %1$s</string>
+    <string name="epg_update_done">Loaded programs: %1$d</string>
+    <string name="epg_auto_update">Update EPG in background</string>
+    <string name="epg_auto_update_hint">Periodic background update, even when the app is closed</string>
+    <string name="epg_update_interval">EPG update interval, hours</string>
     <string name="failed_to_load_epg_channels">Failed to load EPG channels</string>
     <string name="epg_offset">EPG time offset, h:min</string>
     <string name="epg_sources_priority">EPG sources priority</string>

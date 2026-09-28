@@ -15,7 +15,8 @@ object Notifications {
 
     const val CHANNEL_REMINDERS = "tvibro_reminders"
     const val CHANNEL_UPDATES = "tvibro_updates"
-        const val ID_UPDATE_PROGRESS = 1002
+    const val ID_UPDATE_PROGRESS = 1002
+    const val ID_UPDATE_DONE = 1003
 
     fun createChannel(context: Context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
@@ -52,5 +53,23 @@ object Notifications {
             .build()
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         manager.notify(channelName.hashCode(), notification)
+    }
+
+    fun showEpgUpdated(context: Context, count: Int) {
+        val intent = Intent(context, MainActivity::class.java)
+        val pending = PendingIntent.getActivity(
+            context, ID_UPDATE_DONE, intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val notification = NotificationCompat.Builder(context, CHANNEL_UPDATES)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle(context.getString(R.string.update_epg))
+            .setContentText(context.getString(R.string.epg_update_done, count))
+            .setAutoCancel(true)
+            .setContentIntent(pending)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .build()
+        val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        manager.notify(ID_UPDATE_DONE, notification)
     }
 }

@@ -303,6 +303,14 @@ class Prefs private constructor(context: Context) {
         get() = sp.getBoolean(KEY_EPG_FULL_SCAN, false)
         set(v) = sp.edit { putBoolean(KEY_EPG_FULL_SCAN, v) }
 
+    var epgAutoUpdate: Boolean
+        get() = sp.getBoolean(KEY_EPG_AUTO_UPDATE, false)
+        set(v) = sp.edit { putBoolean(KEY_EPG_AUTO_UPDATE, v) }
+
+    var epgUpdateIntervalHours: Int
+        get() = sp.getInt(KEY_EPG_UPDATE_INTERVAL, 12).coerceIn(1, 168)
+        set(v) = sp.edit { putInt(KEY_EPG_UPDATE_INTERVAL, v.coerceIn(1, 168)) }
+
     // ------------------------------------------------------------- behaviour
 
     var autoStartOnBoot: Boolean
@@ -564,6 +572,8 @@ class Prefs private constructor(context: Context) {
         const val KEY_UPDATE_START = "update_start"
         const val KEY_UPDATE_CHANGE = "update_change"
         const val KEY_EPG_FULL_SCAN = "epg_full_scan"
+        const val KEY_EPG_AUTO_UPDATE = "epg_auto_update"
+        const val KEY_EPG_UPDATE_INTERVAL = "epg_update_interval"
 
         const val KEY_AUTOSTART_BOOT = "autostart_boot"
         const val KEY_AUTOSTART_WAKE = "autostart_wake"

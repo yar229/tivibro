@@ -18,6 +18,7 @@ import com.tvibro.data.model.EpgSource
 import com.tvibro.ui.common.Dialogs
 import com.tvibro.ui.common.PinGate
 import com.tvibro.ui.playlist.PlaylistWizardActivity
+import com.tvibro.work.EpgUpdateScheduler
 import java.io.File
 
 class SettingsActivity : AppCompatActivity() {
@@ -421,6 +422,23 @@ class SettingsActivity : AppCompatActivity() {
             ))
             add(switchItem(R.string.store_descriptions) { prefs.storeDescriptions })
             add(switchItem(R.string.full_scan, R.string.full_scan_hint) { prefs.epgFullScan })
+            add(
+                switchItem(R.string.epg_auto_update, R.string.epg_auto_update_hint) {
+                    prefs.epgAutoUpdate
+                }
+            )
+            add(
+                SettingItem.Number(
+                    getString(R.string.epg_update_interval),
+                    min = 1,
+                    max = 168,
+                    get = { prefs.epgUpdateIntervalHours },
+                    set = {
+                        prefs.epgUpdateIntervalHours = it
+                        if (prefs.epgAutoUpdate) EpgUpdateScheduler.apply(this@SettingsActivity)
+                    },
+                )
+            )
             add(SettingItem.Action(getString(R.string.epg_sources)) { showEpgSources() })
             add(SettingItem.Action(getString(R.string.update_epg)) { updateEpg() })
             add(SettingItem.Action(getString(R.string.clear_epg)) { clearEpg() })
@@ -537,6 +555,10 @@ class SettingsActivity : AppCompatActivity() {
             R.string.autoplay_channels -> prefs.autoplayChannels = value
             R.string.confirm_exit -> prefs.confirmExit = value
             R.string.long_back_to_player -> prefs.longBackToPlayer = value
+            R.string.epg_auto_update -> {
+                prefs.epgAutoUpdate = value
+                EpgUpdateScheduler.apply(this)
+            }
             else -> Unit
         }
     }
@@ -645,14 +667,8 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     private fun updateEpg() {
-        val dialog = Dialogs.progress(this, getString(R.string.update_epg))
-        dialog.show()
-        TvBroApp.get().sources.refreshAllEpg { count ->
-            dialog.dismiss()
-            if (!isFinishing && !isDestroyed) {
-                toast(getString(R.string.epg_updated, count, ""))
-            }
-        }
+        EpgUpdateScheduler.runNow(this)
+        toast(getString(R.string.epg_update_started))
     }
 
     private fun clearEpg() {

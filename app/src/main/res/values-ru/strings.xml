@@ -361,6 +361,12 @@
     <string name="update_epg">Обновить EPG</string>
     <string name="epg_updated">EPG успешно обновлён для %1$d каналов: %2$s</string>
     <string name="epg_update_failed">Не удалось обновить EPG из «%1$s» (%2$s). Проверьте адрес EPG и подключение к интернету.</string>
+    <string name="epg_update_started">Обновление EPG запущено</string>
+    <string name="epg_update_source">Источник: %1$s</string>
+    <string name="epg_update_done">Загружено передач: %1$d</string>
+    <string name="epg_auto_update">Обновлять EPG в фоне</string>
+    <string name="epg_auto_update_hint">Периодическое обновление в фоне, даже когда приложение закрыто</string>
+    <string name="epg_update_interval">Интервал обновления EPG, ч</string>
     <string name="failed_to_load_epg_channels">Не удалось загрузить каналы EPG</string>
     <string name="epg_offset">Смещение времени EPG, ч:мин</string>
     <string name="epg_sources_priority">Приоритет источников EPG</string>

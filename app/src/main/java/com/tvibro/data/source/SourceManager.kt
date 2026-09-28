@@ -86,11 +86,19 @@ class SourceManager(context: Context) {
 
     // ------------------------------------------------------------------- epg
 
-    fun loadEpgFor(playlist: Playlist, channels: List<Channel>? = null): Map<Long, List<Program>> {
+    fun loadEpgFor(
+        playlist: Playlist,
+        channels: List<Channel>? = null,
+        onProgress: ((String) -> Unit)? = null,
+    ): Map<Long, List<Program>> {
         val sources = repo.epgSourcesForAny(playlist.id)
-        val urls = LinkedHashSet<String>()
-        playlist.epgUrl.takeIf { it.isNotBlank() }?.let { urls += it }
-        sources.forEach { urls += it.url }
+        val urls = LinkedHashMap<String, Long?>()
+        val namesById = HashMap<Long, String>()
+        playlist.epgUrl.takeIf { it.isNotBlank() }?.let { urls[it] = null }
+        sources.forEach {
+            urls.putIfAbsent(it.url, it.id)
+            namesById[it.id] = it.name
+        }
         if (urls.isEmpty()) return emptyMap()
 
         val now = System.currentTimeMillis()
@@ -107,7 +115,8 @@ class SourceManager(context: Context) {
         }
         val result = HashMap<Long, MutableList<Program>>()
 
-        urls.forEach { url ->
+        urls.forEach { (url, sourceId) ->
+            onProgress?.invoke(sourceId?.let { namesById[it] } ?: playlist.name)
             try {
                 val res = Http.get(url, playlist.userAgent, readTimeoutMs = 120000)
                 if (!res.ok) return@forEach
@@ -119,6 +128,7 @@ class SourceManager(context: Context) {
                     p.channelId = channel.id
                     result.getOrPut(p.channelId) { ArrayList() } += p
                 }
+                sourceId?.let { repo.setEpgSourceLastUpdate(it, System.currentTimeMillis()) }
             } catch (e: Exception) {
                 // skip broken source, keep the rest
             }
@@ -142,12 +152,12 @@ class SourceManager(context: Context) {
         }
     }
 
-    fun refreshAllEpg(onDone: (Int) -> Unit) {
+    fun refreshAllEpg(onProgress: (String) -> Unit = {}, onDone: (Int) -> Unit) {
         executor.execute {
             running.set(true)
             var total = 0
             repo.playlists(onlyEnabled = true).forEach { playlist ->
-                total += loadEpgFor(playlist).values.sumOf { it.size }
+                total += loadEpgFor(playlist) { onProgress(it) }.values.sumOf { it.size }
             }
             running.set(false)
             onMain { onDone(total) }
