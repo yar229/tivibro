@@ -46,6 +46,19 @@ class Prefs private constructor(context: Context) {
         get() = sp.getString(KEY_FONT_SIZE, "1.0")!!.toFloatOrNull() ?: 1f
         set(v) = sp.edit { putString(KEY_FONT_SIZE, v.toString()) }
 
+    /** Multipliers for the three player panels, independent of the global font size. */
+    var bottomPanelFont: Float
+        get() = sp.getString(KEY_BOTTOM_PANEL_FONT, "1.0")!!.toFloatOrNull() ?: 1f
+        set(v) = sp.edit { putString(KEY_BOTTOM_PANEL_FONT, v.toString()) }
+
+    var channelPanelFont: Float
+        get() = sp.getString(KEY_CHANNEL_PANEL_FONT, "1.0")!!.toFloatOrNull() ?: 1f
+        set(v) = sp.edit { putString(KEY_CHANNEL_PANEL_FONT, v.toString()) }
+
+    var infoPanelFont: Float
+        get() = sp.getString(KEY_INFO_PANEL_FONT, "1.0")!!.toFloatOrNull() ?: 1f
+        set(v) = sp.edit { putString(KEY_INFO_PANEL_FONT, v.toString()) }
+
     var uiTransparency: Int
         get() = sp.getInt(KEY_UI_TRANSPARENCY, 100)
         set(v) = sp.edit { putInt(KEY_UI_TRANSPARENCY, v) }
@@ -507,6 +520,9 @@ class Prefs private constructor(context: Context) {
         const val KEY_COLOR_THEME = "color_theme"
         const val KEY_ACCENT_COLOR = "accent_color"
         const val KEY_FONT_SIZE = "font_size"
+        const val KEY_BOTTOM_PANEL_FONT = "bottom_panel_font"
+        const val KEY_CHANNEL_PANEL_FONT = "channel_panel_font"
+        const val KEY_INFO_PANEL_FONT = "info_panel_font"
         const val KEY_UI_TRANSPARENCY = "ui_transparency"
         const val KEY_SHOW_CHANNEL_NAMES = "show_channel_names"
         const val KEY_SHOW_CHANNEL_NUMBERS = "show_channel_numbers"

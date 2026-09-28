@@ -406,6 +406,9 @@
     <string name="bottom_left">Снизу слева</string>
     <string name="bottom_right">Снизу справа</string>
     <string name="font_size">Размер шрифта</string>
+    <string name="font_size_bottom_panel">Размер шрифта нижней панели</string>
+    <string name="font_size_channel_panel">Размер шрифта панели каналов</string>
+    <string name="font_size_info_panel">Размер шрифта инфо-панели</string>
     <string name="small">Мелкий</string>
     <string name="medium">Средний</string>
     <string name="large">Крупный</string>

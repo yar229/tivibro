@@ -11,6 +11,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import android.util.TypedValue
 import android.view.KeyEvent
 import android.view.LayoutInflater
 import android.view.View
@@ -208,6 +209,8 @@ private var watchTimeMs = 0L
         super.onResume()
         keepPlayingBehind = false
         if (::engine.isInitialized && !hidden) engine.play()
+        // font scales can change while Settings is open on top of the player
+        if (::sideChannelAdapter.isInitialized) applyPanelFontScales()
         // a foreground service would need a type on API 34+, a window flag is enough
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
     }
@@ -239,6 +242,7 @@ private var watchTimeMs = 0L
         sideChannelAdapter = SideChannelAdapter(
             onClick = { ch -> selectSideChannel(ch.id) },
             onFocus = { ch -> updateSideProgramDetails(ch.id) },
+            fontScale = prefs.channelPanelFont,
         )
 sideChannelsList = findViewById(R.id.side_channels_list)
         sideChannelsList.layoutManager = LinearLayoutManager(this)
@@ -249,7 +253,7 @@ sideChannelsList = findViewById(R.id.side_channels_list)
         sideProgramDescription = findViewById(R.id.side_program_description)
         sideScheduleList = findViewById(R.id.side_schedule_list)
         sideScheduleEmpty = findViewById(R.id.side_schedule_empty)
-        sideScheduleAdapter = SideScheduleAdapter()
+        sideScheduleAdapter = SideScheduleAdapter(fontScale = prefs.infoPanelFont)
         sideScheduleList.layoutManager = LinearLayoutManager(this)
         sideScheduleList.adapter = sideScheduleAdapter
 
@@ -272,6 +276,42 @@ sideChannelsList = findViewById(R.id.side_channels_list)
         infoStream = findViewById(R.id.info_stream)
         bufferingView = findViewById(R.id.buffering)
         messageView = findViewById(R.id.player_message)
+
+        captureFontScale(switchProgramTitle) { prefs.bottomPanelFont }
+        captureFontScale(switchTime) { prefs.bottomPanelFont }
+        captureFontScale(switchRemaining) { prefs.bottomPanelFont }
+        captureFontScale(switchChannelName) { prefs.bottomPanelFont }
+        captureFontScale(switchNumber) { prefs.bottomPanelFont }
+        captureFontScale(switchQuality) { prefs.bottomPanelFont }
+        captureFontScale(switchFps) { prefs.bottomPanelFont }
+        captureFontScale(switchAudio) { prefs.bottomPanelFont }
+        captureFontScale(switchDescription) { prefs.bottomPanelFont }
+        captureFontScale(switchNextProgram) { prefs.bottomPanelFont }
+
+        captureFontScale(sideProgramTitle) { prefs.infoPanelFont }
+        captureFontScale(sideProgramTime) { prefs.infoPanelFont }
+        captureFontScale(sideProgramDescription) { prefs.infoPanelFont }
+        captureFontScale(findViewById(R.id.side_schedule_header)) { prefs.infoPanelFont }
+        captureFontScale(sideScheduleEmpty) { prefs.infoPanelFont }
+
+        applyPanelFontScales()
+    }
+
+    /** Base sp sizes captured once, so re-applying a scale never compounds. */
+    private class FontScaledView(val view: TextView, val baseSp: Float, val scale: () -> Float)
+
+    private val fontScaledViews = mutableListOf<FontScaledView>()
+
+    private fun captureFontScale(view: TextView, scale: () -> Float) {
+        fontScaledViews += FontScaledView(view, view.textSize / resources.displayMetrics.scaledDensity, scale)
+    }
+
+    private fun applyPanelFontScales() {
+        for (item in fontScaledViews) {
+            item.view.setTextSize(TypedValue.COMPLEX_UNIT_SP, item.baseSp * item.scale())
+        }
+        sideChannelAdapter.setFontScale(prefs.channelPanelFont)
+        sideScheduleAdapter.setFontScale(prefs.infoPanelFont)
     }
 
     private fun buildPanelButtons() {

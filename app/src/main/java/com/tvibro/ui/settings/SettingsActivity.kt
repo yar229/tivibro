@@ -179,6 +179,27 @@ class SettingsActivity : AppCompatActivity() {
                 get = { prefs.fontScale.toString() },
                 set = { prefs.fontScale = it.toFloatOrNull() ?: 1f },
             ))
+            add(SettingItem.Choice(
+                getString(R.string.font_size_bottom_panel),
+                entries = resources.getStringArray(R.array.font_size_entries).toList(),
+                values = resources.getStringArray(R.array.font_size_values).toList(),
+                get = { prefs.bottomPanelFont.toString() },
+                set = { prefs.bottomPanelFont = it.toFloatOrNull() ?: 1f },
+            ))
+            add(SettingItem.Choice(
+                getString(R.string.font_size_channel_panel),
+                entries = resources.getStringArray(R.array.font_size_entries).toList(),
+                values = resources.getStringArray(R.array.font_size_values).toList(),
+                get = { prefs.channelPanelFont.toString() },
+                set = { prefs.channelPanelFont = it.toFloatOrNull() ?: 1f },
+            ))
+            add(SettingItem.Choice(
+                getString(R.string.font_size_info_panel),
+                entries = resources.getStringArray(R.array.font_size_entries).toList(),
+                values = resources.getStringArray(R.array.font_size_values).toList(),
+                get = { prefs.infoPanelFont.toString() },
+                set = { prefs.infoPanelFont = it.toFloatOrNull() ?: 1f },
+            ))
             add(SettingItem.Number(
                 getString(R.string.ui_transparency),
                 min = 20,

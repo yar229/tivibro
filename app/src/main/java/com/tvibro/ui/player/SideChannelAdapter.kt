@@ -3,6 +3,7 @@ package com.tvibro.ui.player
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.util.TypedValue
 import android.widget.ImageView
 import android.widget.ProgressBar
 import android.widget.TextView
@@ -15,11 +16,21 @@ import com.tvibro.data.model.Channel
 class SideChannelAdapter(
     private val onClick: (Channel) -> Unit,
     private val onFocus: ((Channel) -> Unit)? = null,
+    private var fontScale: Float = 1f,
 ) : RecyclerView.Adapter<SideChannelAdapter.Holder>() {
 
     private var items: List<Channel> = emptyList()
     private var programs: Map<Long, ProgramInfo> = emptyMap()
     private var selectedId: Long = -1L
+    private val nameBaseSp = R.dimen.text_sm
+    private val programBaseSp = R.dimen.text_xs
+    private val numberBaseSp = R.dimen.text_xxs
+
+    fun setFontScale(scale: Float) {
+        if (fontScale == scale) return
+        fontScale = scale
+        notifyDataSetChanged()
+    }
 
     fun submit(newItems: List<Channel>) {
         items = newItems
@@ -51,6 +62,9 @@ class SideChannelAdapter(
 
     override fun onBindViewHolder(holder: Holder, position: Int) {
         val channel = items[position]
+        applyScale(holder.name, nameBaseSp)
+        applyScale(holder.program, programBaseSp)
+        applyScale(holder.number, numberBaseSp)
         holder.name.text = channel.name
         holder.number.text = channel.number
         holder.number.visible(channel.number.isNotEmpty())
@@ -79,6 +93,11 @@ class SideChannelAdapter(
     }
 
     override fun getItemCount(): Int = items.size
+
+    private fun applyScale(view: TextView, dimen: Int) {
+        if (fontScale == 1f) return
+        view.setTextSize(TypedValue.COMPLEX_UNIT_SP, view.context.resources.getDimension(dimen) / view.context.resources.displayMetrics.scaledDensity * fontScale)
+    }
 
     fun getChannel(position: Int): Channel? = items.getOrNull(position)
 
