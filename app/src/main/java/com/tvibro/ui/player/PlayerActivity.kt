@@ -43,6 +43,7 @@ import com.tvibro.ui.common.Dialogs
 import com.tvibro.ui.settings.SettingsActivity
 import java.text.SimpleDateFormat
 import java.util.Date
+import java.util.LinkedHashMap
 import java.util.Locale
 import java.util.concurrent.Executors
 
@@ -82,6 +83,11 @@ class PlayerActivity : AppCompatActivity() {
     private lateinit var sideScheduleAdapter: SideScheduleAdapter
     private var sideScheduleChannelId = -1L
     private var sideFocusedChannelId = -1L
+    private val sideScheduleCache = object : LinkedHashMap<Long, List<Program>>(8, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Long, List<Program>>): Boolean = size > 8
+    }
+    private var sideProgramLoadId = -1L
+    private val sideProgramDebounce = Runnable { loadSideProgramDetails(sideProgramLoadId) }
     private var sideChannelPosition = 0
     private var sideSchedulePosition = 0
     private var sideChannelsLoaded = false
@@ -491,7 +497,7 @@ sideChannelsList = findViewById(R.id.side_channels_list)
       if (sideChannelsVisible && now - lastSideProgramsAt > SIDE_PROGRAMS_REFRESH_MS) {
         refreshSidePrograms()
         if (sideFocusedChannelId > 0) {
-          updateSideProgramDetails(sideFocusedChannelId)
+          loadSideProgramDetails(sideFocusedChannelId)
           sideScheduleAdapter.refreshNow()
         }
       }
@@ -648,18 +654,33 @@ sideChannelsList = findViewById(R.id.side_channels_list)
     }
 
     private fun updateSideProgramDetails(channelId: Long) {
+        // Instant, cheap feedback straight from the already-bound row while scrolling.
+        val index = sideChannelAdapter.indexOf(channelId)
+        sideChannelAdapter.getChannel(index)?.let { sideProgramTitle.text = it.name }
+        // Debounce the heavy side panel load: rapid focus changes only trigger the last one.
+        if (channelId != sideProgramLoadId) {
+            sideProgramLoadId = channelId
+            main.removeCallbacks(sideProgramDebounce)
+            main.postDelayed(sideProgramDebounce, SIDE_PROGRAM_DEBOUNCE_MS)
+        }
+    }
+
+    private fun loadSideProgramDetails(channelId: Long) {
         val needSchedule = channelId != sideScheduleChannelId
         executor.execute {
             val ch = repo.channel(channelId) ?: return@execute
             val prog = repo.currentProgram(channelId)
             val now = System.currentTimeMillis()
             val schedule = if (needSchedule) {
-                repo.programsFor(channelId, now - 6 * 3600_000L, now + 12 * 3600_000L)
+                sideScheduleCache[channelId] ?: repo.programsFor(channelId, now - 6 * 3600_000L, now + 12 * 3600_000L)
                     .filter { it.stop > now }
+                    .also { sideScheduleCache[channelId] = it }
             } else {
                 null
             }
             main.post {
+                // Drop stale results: the user may have moved on while the query ran.
+                if (channelId != sideProgramLoadId) return@post
                 sideFocusedChannelId = channelId
                 sideProgramTitle.text = prog?.title ?: ch.name
                 sideProgramTime.text = if (prog != null) {
@@ -1400,6 +1421,9 @@ sideChannelsList = findViewById(R.id.side_channels_list)
 
         /** How often the channel list EPG progress is reloaded while the list is open. */
         const val SIDE_PROGRAMS_REFRESH_MS = 30_000L
+
+        /** How long the focused channel's details wait before the heavy DB load starts. */
+        const val SIDE_PROGRAM_DEBOUNCE_MS = 250L
     }
 }
 
