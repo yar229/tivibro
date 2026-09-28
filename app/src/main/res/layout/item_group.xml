@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:app="http://schemas.android.com/apk/res-auto" xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:minHeight="52dp"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:paddingStart="@dimen/spacing_md"
+    android:paddingEnd="@dimen/spacing_md"
+    android:background="@drawable/bg_group_item"
+    android:focusable="true"
+    android:focusableInTouchMode="true">
+
+    <ImageView
+        android:id="@+id/group_icon"
+        android:layout_width="24dp"
+        android:layout_height="24dp"
+        android:layout_marginEnd="@dimen/spacing_sm"
+        android:contentDescription="@null"
+        android:src="@drawable/ic_list"
+        app:tint="@color/text_secondary" />
+
+    <TextView
+        android:id="@+id/group_name"
+        style="@style/TvBro.Text.Title"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:ellipsize="marquee"
+        android:marqueeRepeatLimit="marquee_forever"
+        tools:text="Sports" />
+
+    <TextView
+        android:id="@+id/group_count"
+        style="@style/TvBro.Text.Time"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        tools:text="24" />
+</LinearLayout>

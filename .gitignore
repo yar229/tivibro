@@ -1,0 +1,64 @@
+# Gradle
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+
+# Local configuration
+local.properties
+gradle.properties
+
+# IDE
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# Build outputs
+*.apk
+*.aab
+*.ap_
+
+# Generated files
+*.class
+*.log
+
+# Android
+*.ap_
+*.dex
+
+# Local configuration
+.gradletasknamecache
+
+# Keystore
+*.jks
+*.keystore
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Backup
+*.bak
+*~
+
+# Temporary files
+*.tmp
+*.temp
+
+# Android Studio
+.idea/workspace.xml
+.idea/shelf/
+.idea/gradle.xml
+.idea/inspectionProfiles/
+
+# Kotlin
+*.kt.metadata
+
+# Coverage
+coverage/
+
+# ProGuard
+proguard/
+
+# Release
+release/

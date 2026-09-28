@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="@dimen/channel_row_min_height"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:paddingStart="@dimen/spacing_sm"
+    android:paddingEnd="@dimen/spacing_sm"
+    android:background="@drawable/bg_group_item"
+    android:focusable="true"
+    android:focusableInTouchMode="true">
+
+    <ImageView
+        android:id="@+id/logo"
+        android:layout_width="@dimen/logo_size"
+        android:layout_height="@dimen/logo_size"
+        android:contentDescription="@null"
+        android:scaleType="fitCenter"
+        tools:src="@drawable/ic_logo_channel" />
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="@dimen/spacing_sm"
+        android:layout_weight="1"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/channel_name"
+            style="@style/TvBro.Text.Channel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textSize="@dimen/text_sm"
+            tools:text="Sky Sports" />
+
+        <TextView
+            android:id="@+id/channel_number"
+            style="@style/TvBro.Text.Time"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            tools:text="101" />
+    </LinearLayout>
+</LinearLayout>

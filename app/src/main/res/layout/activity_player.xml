@@ -1,0 +1,436 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/player_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@android:color/black"
+    android:keepScreenOn="true">
+
+    <!-- The engine (ExoPlayer PlayerView or VLC SurfaceView) is added into engine_holder at runtime. -->
+
+    <!-- Side channel list + program details (left) -->
+    <LinearLayout
+        android:id="@+id/side_container"
+        android:layout_width="640dp"
+        android:layout_height="match_parent"
+        android:layout_gravity="start"
+        android:orientation="horizontal"
+        android:visibility="gone">
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/side_channels_list"
+            android:layout_width="320dp"
+            android:layout_height="match_parent"
+            android:background="@drawable/bg_side_channels"
+            android:paddingTop="@dimen/header_height"
+            android:paddingBottom="@dimen/spacing_lg"
+            android:scrollbars="none" />
+
+        <LinearLayout
+            android:id="@+id/side_program_details"
+            android:layout_width="320dp"
+            android:layout_height="match_parent"
+            android:background="@drawable/bg_side_channels"
+            android:orientation="vertical"
+            android:padding="@dimen/spacing_lg">
+
+            <TextView
+                android:id="@+id/side_program_title"
+                style="@style/TvBro.Text.Title"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textSize="@dimen/text_lg"
+                tools:text="Форт. Возвращение легенды. 1 с." />
+
+            <TextView
+                android:id="@+id/side_program_time"
+                style="@style/TvBro.Text.Time"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_xs"
+                android:textSize="@dimen/text_md"
+                tools:text="21:05 — 22:45 · осталось 42 мин" />
+
+            <TextView
+                android:id="@+id/side_program_description"
+                style="@style/TvBro.Text.Subtitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_md"
+                android:textSize="@dimen/text_sm"
+                tools:text="Шесть звездных участников пройдут ряд испытаний..." />
+
+            <TextView
+                android:id="@+id/side_program_next"
+                style="@style/TvBro.Text.Time"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_md"
+                android:textSize="@dimen/text_sm"
+                android:visibility="gone"
+                tools:text="Далее: 22:45 — 23:30  Новости"
+                tools:visibility="visible" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- OSD header -->
+    <LinearLayout
+        android:id="@+id/osd_header"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top"
+        android:background="@drawable/osd_scrim_top"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="@dimen/spacing_xl"
+        android:paddingEnd="@dimen/spacing_xl"
+        android:paddingTop="@dimen/spacing_md"
+        android:paddingBottom="@dimen/spacing_md"
+        android:visibility="gone">
+
+        <ImageView
+            android:id="@+id/osd_logo"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:layout_marginEnd="@dimen/spacing_md"
+            android:contentDescription="@null"
+            android:scaleType="fitCenter" />
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/osd_channel_name"
+                style="@style/TvBro.Text.Title"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textSize="@dimen/text_lg"
+                tools:text="Sky Sports Main Event" />
+
+            <TextView
+                android:id="@+id/osd_group"
+                style="@style/TvBro.Text.Time"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                tools:text="Sports · 101" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/osd_clock"
+            style="@style/TvBro.Text.Title"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            tools:text="20:15" />
+    </LinearLayout>
+
+    <!-- Bottom panels: switch info above player controls -->
+    <LinearLayout
+        android:id="@+id/bottom_container"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:orientation="vertical">
+
+        <!-- Channel switch info -->
+        <LinearLayout
+            android:id="@+id/switch_panel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_switch_panel"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="@dimen/spacing_xl"
+            android:paddingEnd="@dimen/spacing_xl"
+            android:paddingTop="@dimen/spacing_lg"
+            android:paddingBottom="@dimen/spacing_lg"
+            android:visibility="gone">
+
+            <ImageView
+                android:id="@+id/switch_logo"
+                android:layout_width="80dp"
+                android:layout_height="80dp"
+                android:layout_marginEnd="@dimen/spacing_lg"
+                android:background="@drawable/bg_card_channel"
+                android:contentDescription="@null"
+                android:padding="@dimen/spacing_sm"
+                android:scaleType="fitCenter"
+                tools:src="@drawable/ic_logo_channel" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/switch_program_title"
+                style="@style/TvBro.Text.Title"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:textSize="@dimen/text_xl"
+                tools:text="м/ф Черепашки-ниндзя (Атака Биг Макка)" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/spacing_xs"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                <TextView
+                    android:id="@+id/switch_time"
+                    style="@style/TvBro.Text.Time"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textSize="@dimen/text_md"
+                    tools:text="17:40 — 18:01" />
+
+                    <ProgressBar
+                        android:id="@+id/switch_progress"
+                        style="?android:attr/progressBarStyleHorizontal"
+                        android:layout_width="80dp"
+                        android:layout_height="2dp"
+                        android:layout_marginStart="@dimen/spacing_md"
+                        android:layout_marginEnd="@dimen/spacing_md"
+                        android:progressDrawable="@drawable/progress_switch" />
+
+                <TextView
+                    android:id="@+id/switch_remaining"
+                    style="@style/TvBro.Text.Time"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textSize="@dimen/text_md"
+                    tools:text="6 мин" />
+
+                    <TextView
+                        android:id="@+id/switch_number"
+                        style="@style/TvBro.Badge"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="@dimen/spacing_sm"
+                        android:background="@drawable/bg_badge_live"
+                        android:visibility="gone"
+                        tools:text="30"
+                        tools:visibility="visible" />
+
+                <TextView
+                    android:id="@+id/switch_channel_name"
+                    style="@style/TvBro.Text.Time"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="@dimen/spacing_sm"
+                    android:textSize="@dimen/text_md"
+                    tools:text="Cartoon Classics [TV]" />
+
+                    <TextView
+                        android:id="@+id/switch_quality"
+                        style="@style/TvBro.Badge"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="@dimen/spacing_sm"
+                        android:background="@drawable/bg_badge_live"
+                        android:visibility="gone"
+                        tools:text="HD"
+                        tools:visibility="visible" />
+
+                    <TextView
+                        android:id="@+id/switch_fps"
+                        style="@style/TvBro.Badge"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="@dimen/spacing_sm"
+                        android:background="@drawable/bg_badge_live"
+                        android:visibility="gone"
+                        tools:text="25 FPS"
+                        tools:visibility="visible" />
+
+                    <TextView
+                        android:id="@+id/switch_audio"
+                        style="@style/TvBro.Badge"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="@dimen/spacing_sm"
+                        android:background="@drawable/bg_badge_live"
+                        android:visibility="gone"
+                        tools:text="Stereo"
+                        tools:visibility="visible" />
+                </LinearLayout>
+
+            <TextView
+                android:id="@+id/switch_description"
+                style="@style/TvBro.Text.Subtitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_xs"
+                android:ellipsize="end"
+                android:maxLines="3"
+                android:textSize="@dimen/text_md"
+                android:visibility="gone"
+                tools:text="Робот-воин, известный как Мобильный Бронированный Компьютеризированный Боец..."
+                tools:visibility="visible" />
+
+            <TextView
+                android:id="@+id/switch_next_program"
+                style="@style/TvBro.Text.Time"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_xs"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:textSize="@dimen/text_md"
+                android:visibility="gone"
+                tools:text="18:01 — 18:22  м/ф Черепашки-ниндзя (Банда в сборе)"
+                tools:visibility="visible" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Bottom control panel -->
+        <LinearLayout
+            android:id="@+id/osd_panel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@drawable/osd_scrim_bottom"
+            android:orientation="vertical"
+            android:paddingStart="@dimen/spacing_xl"
+            android:paddingEnd="@dimen/spacing_xl"
+            android:paddingTop="@dimen/spacing_sm"
+            android:paddingBottom="@dimen/spacing_md"
+            android:visibility="gone">
+
+            <ProgressBar
+                android:id="@+id/panel_seek"
+                style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="match_parent"
+                android:layout_height="4dp"
+                android:max="1000"
+                android:progressDrawable="@drawable/bg_progress_bar" />
+
+            <LinearLayout
+                android:id="@+id/panel_buttons"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_md"
+                android:orientation="horizontal" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- Info panel -->
+    <LinearLayout
+        android:id="@+id/info_panel"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@drawable/bg_dialog_panel"
+        android:orientation="vertical"
+        android:padding="@dimen/spacing_xl"
+        android:visibility="gone">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <ImageView
+                android:id="@+id/info_logo"
+                android:layout_width="@dimen/logo_frame"
+                android:layout_height="@dimen/logo_frame"
+                android:layout_marginEnd="@dimen/spacing_lg"
+                android:contentDescription="@null"
+                android:scaleType="fitCenter" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/info_channel_name"
+                    style="@style/TvBro.DialogTitle"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    tools:text="Sky Sports Main Event" />
+
+                <TextView
+                    android:id="@+id/info_group"
+                    style="@style/TvBro.Text.Time"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    tools:text="Sports · 101 · HD" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginTop="@dimen/spacing_lg"
+            android:background="@color/divider" />
+
+        <TextView
+            android:id="@+id/info_program_title"
+            style="@style/TvBro.Text.Title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/spacing_lg"
+            tools:text="Live: Premier League" />
+
+        <TextView
+            android:id="@+id/info_program_time"
+            style="@style/TvBro.Text.Time"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            tools:text="20:15 - 21:00 · 62% · 23 min left" />
+
+        <TextView
+            android:id="@+id/info_next_program"
+            style="@style/TvBro.Text.Subtitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/spacing_sm"
+            tools:text="Next: Live: Championship" />
+
+        <TextView
+            android:id="@+id/info_description"
+            style="@style/TvBro.DialogText"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:layout_marginTop="@dimen/spacing_lg"
+            android:ellipsize="end"
+            tools:text="Live coverage of the match" />
+
+        <TextView
+            android:id="@+id/info_stream"
+            style="@style/TvBro.Text.Time"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/spacing_md"
+            tools:text="1920x1080 · H.264" />
+    </LinearLayout>
+
+    <ProgressBar
+        android:id="@+id/buffering"
+        style="?android:attr/progressBarStyleLarge"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:visibility="gone" />
+
+    <TextView
+        android:id="@+id/player_message"
+        style="@style/TvBro.Text.Title"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:gravity="center"
+        android:padding="@dimen/spacing_xl"
+        android:visibility="gone"
+        tools:text="Channel is unavailable" />
+</FrameLayout>

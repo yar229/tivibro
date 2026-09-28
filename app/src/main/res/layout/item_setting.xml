@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:app="http://schemas.android.com/apk/res-auto" xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:minHeight="@dimen/row_min_height"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:paddingStart="@dimen/spacing_lg"
+    android:paddingEnd="@dimen/spacing_lg"
+    android:background="@drawable/bg_row"
+    android:focusable="true"
+    android:focusableInTouchMode="true">
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/setting_title"
+            style="@style/TvBro.Text.Title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            tools:text="Show clock" />
+
+        <TextView
+            android:id="@+id/setting_summary"
+            style="@style/TvBro.Text.Time"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            tools:text="Show clock in the top right corner" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/setting_value"
+        style="@style/TvBro.Text.Time"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="@dimen/spacing_md"
+        tools:text="ON" />
+
+    <androidx.appcompat.widget.SwitchCompat
+        android:id="@+id/setting_switch"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="@dimen/spacing_md"
+        android:focusable="false" />
+
+    <ImageView
+        android:id="@+id/setting_chevron"
+        android:layout_width="20dp"
+        android:layout_height="20dp"
+        android:layout_marginStart="@dimen/spacing_md"
+        android:contentDescription="@null"
+        android:src="@drawable/ic_chevron_right"
+        app:tint="@color/text_secondary" />
+</LinearLayout>

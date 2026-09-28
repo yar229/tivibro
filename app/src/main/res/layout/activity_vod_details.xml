@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:keepScreenOn="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="@dimen/header_height"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="@dimen/spacing_lg"
+        android:paddingEnd="@dimen/spacing_lg"
+        android:background="@drawable/osd_scrim_bottom">
+
+        <ImageView
+            android:id="@+id/back_button"
+            android:layout_width="@dimen/touch_target"
+            android:layout_height="@dimen/touch_target"
+            android:background="@drawable/bg_player_button"
+            android:contentDescription="@string/back"
+            android:focusable="true"
+            android:padding="@dimen/spacing_md"
+            android:src="@drawable/ic_arrow_back" />
+
+        <TextView
+            android:id="@+id/details_title"
+            style="@style/TvBro.Text.Title"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="@dimen/spacing_md"
+            android:layout_weight="1"
+            tools:text="The Movie" />
+
+        <Button
+            android:id="@+id/play_button"
+            style="@style/TvBro.Button"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/play" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:orientation="horizontal">
+
+        <ImageView
+            android:id="@+id/poster"
+            android:layout_width="240dp"
+            android:layout_height="match_parent"
+            android:contentDescription="@null"
+            android:padding="@dimen/spacing_lg"
+            android:scaleType="centerCrop"
+            tools:src="@drawable/ic_movie" />
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:paddingEnd="@dimen/spacing_lg">
+
+            <TextView
+                android:id="@+id/details_info"
+                style="@style/TvBro.Text.Time"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                tools:text="2021 · Action · 8.1" />
+
+            <TextView
+                android:id="@+id/details_plot"
+                style="@style/TvBro.DialogText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_md"
+                android:maxLines="4"
+                android:ellipsize="end"
+                tools:text="Plot description" />
+
+            <TextView
+                android:id="@+id/details_cast"
+                style="@style/TvBro.Text.Subtitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_sm"
+                tools:text="Cast: ..." />
+
+            <TextView
+                android:id="@+id/episodes_label"
+                style="@style/TvBro.Text.Title"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_lg"
+                android:text="@string/episodes"
+                android:visibility="gone" />
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/episodes_list"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:scrollbars="none" />
+        </LinearLayout>
+    </LinearLayout>
+</LinearLayout>

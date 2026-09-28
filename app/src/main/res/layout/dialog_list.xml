@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:background="@drawable/bg_dialog_panel"
+    android:padding="@dimen/spacing_lg">
+
+    <TextView
+        android:id="@+id/dialog_title"
+        style="@style/TvBro.DialogTitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        tools:text="Playlist type" />
+
+    <TextView
+        android:id="@+id/dialog_message"
+        style="@style/TvBro.DialogText"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/spacing_xs"
+        android:visibility="gone"
+        tools:text="Select the playlist type" />
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/dialog_list"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/spacing_md"
+        android:maxHeight="360dp"
+        android:minHeight="120dp"
+        android:focusable="true"
+        android:scrollbars="none" />
+</LinearLayout>

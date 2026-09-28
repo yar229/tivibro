@@ -1,0 +1,817 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">TiViBro</string>
+
+    <!-- Navigation -->
+    <string name="nav_live_tv">Live TV</string>
+    <string name="nav_movies">Movies</string>
+    <string name="nav_shows">TV shows</string>
+    <string name="nav_guide">TV guide</string>
+    <string name="nav_favorites">Favorites</string>
+    <string name="nav_settings">Settings</string>
+    <string name="nav_history">History</string>
+
+    <!-- Generic -->
+    <string name="ok">OK</string>
+    <string name="cancel">Cancel</string>
+    <string name="yes">Yes</string>
+    <string name="no">No</string>
+    <string name="save">Save</string>
+    <string name="delete">Delete</string>
+    <string name="update">Update</string>
+    <string name="reset">Reset</string>
+    <string name="restore">Restore</string>
+    <string name="add">Add</string>
+    <string name="edit">Edit</string>
+    <string name="apply">Apply</string>
+    <string name="close">Close</string>
+    <string name="back">Back</string>
+    <string name="next">Next</string>
+    <string name="search">Search</string>
+    <string name="select">Select</string>
+    <string name="set">Set</string>
+    <string name="done">Done</string>
+    <string name="remove">Remove</string>
+    <string name="error">Error</string>
+    <string name="warning">Warning</string>
+    <string name="optional">optional</string>
+    <string name="required">required</string>
+    <string name="not_set">Not set</string>
+    <string name="name">Name</string>
+    <string name="login">Login</string>
+    <string name="server">Server</string>
+    <string name="url">URL</string>
+    <string name="background">Background</string>
+    <string name="my_group">My group</string>
+    <string name="m3u_file">M3U file</string>
+    <string name="local_file">Local file</string>
+    <string name="epg_url">EPG URL</string>
+    <string name="mac_address">MAC address</string>
+    <string name="show_password">Show password</string>
+    <string name="loading">Loading…</string>
+    <string name="please_wait">Please wait…</string>
+    <string name="clear_history">Clear history?</string>
+    <string name="nothing_found">Nothing found</string>
+    <string name="no_history">No history</string>
+    <string name="search_history">Search history</string>
+    <string name="show_search_history">Show search history</string>
+    <string name="on">ON</string>
+    <string name="off">OFF</string>
+    <string name="an_error_occurred">An error occurred</string>
+
+    <!-- Channel list -->
+    <string name="channels">Channels</string>
+    <string name="no_channels">No channels</string>
+    <string name="no_playlists">No playlists</string>
+    <string name="all_channels">All channels</string>
+    <string name="all_playlists">All playlists</string>
+    <string name="favorites">Favorites</string>
+    <string name="programs">Programs</string>
+    <string name="no_programs">No programs</string>
+    <string name="no_information">No information</string>
+    <string name="press_ok_to_turn_on">Press OK to turn on channel</string>
+    <string name="press_ok_to_show_menu">Press OK to show menu</string>
+    <string name="long_ok_to_open_menu">Long OK: open menu</string>
+    <string name="add_playlist">Add playlist</string>
+    <string name="add_to_favorites">Add to Favorites</string>
+    <string name="added_to_favorites">Added to Favorites</string>
+    <string name="remove_from_favorites">Remove from Favorites</string>
+    <string name="removed_from_favorites">Removed from Favorites</string>
+    <string name="manage_favorites">Manage Favorites</string>
+    <string name="change_favorite_status">Change Favorite status</string>
+    <string name="watch_channel">Watch channel</string>
+    <string name="channel_options">Channel options</string>
+    <string name="block_channel">Block channel</string>
+    <string name="unblock_channel">Unblock channel</string>
+    <string name="hide_channel">Hide channel</string>
+    <string name="hide_channel_hint">You can show the channel again in "Manage visibility" mode</string>
+    <string name="hide_channel_q">Hide channel?</string>
+    <string name="manage_visibility">Manage visibility</string>
+    <string name="manage_blocking">Manage blocking</string>
+    <string name="channel_is_blocked">Channel is blocked</string>
+    <string name="group_is_blocked">Group is blocked</string>
+    <string name="channel_is_unblocked">Channel is unblocked</string>
+    <string name="group_is_unblocked">Group is unblocked</string>
+    <string name="block_group">Block group</string>
+    <string name="unblock_group">Unblock group</string>
+    <string name="hide_group">Hide group</string>
+    <string name="hide_group_q">Hide group?</string>
+    <string name="hide_group_hint">You can show the group again in the playlist settings</string>
+    <string name="show_groups">Show groups</string>
+    <string name="show_all_groups">Show all groups</string>
+    <string name="hide_all_groups">Hide all groups</string>
+    <string name="no_groups">No groups</string>
+    <string name="group_name">Group name</string>
+    <string name="group_options">Group options</string>
+    <string name="delete_group">Delete group</string>
+    <string name="delete_group_q">Delete group?</string>
+    <string name="delete_group_msg">Group "%1$s" will be deleted</string>
+    <string name="group_is_created">Group is created</string>
+    <string name="create_group">Create group</string>
+    <string name="restore_group_name">Restore group name</string>
+    <string name="channels_copy">Channels are copied</string>
+    <string name="channels_moved">Channels are moved</string>
+    <string name="copy_channels">Copy channels</string>
+    <string name="select_channels">Select channels</string>
+    <string name="select_groups">Select groups</string>
+    <string name="unselect_all">Unselect all</string>
+    <string name="show_channels_from_hidden_groups">Show channels from hidden groups</string>
+    <string name="show_favorites_only">Show Favorites only</string>
+    <string name="show_unassigned_channels">Show unassigned channels</string>
+    <string name="there_is_no_channel_in_group">There is no channel in the current group</string>
+    <string name="playlist_selection">Playlist selection</string>
+    <string name="select_playlists_hint">Select the playlists you want to see in the current group</string>
+    <string name="recent_channels">Recent channels</string>
+    <string name="turn_on_most_recent_channel">Turn on most recent channel</string>
+    <string name="change_channel">Change channel</string>
+    <string name="press_again_to_switch">Press again to switch the channel</string>
+    <string name="go_to_live_stream">Go to live stream</string>
+    <string name="watch_from_start">Watch from start</string>
+    <string name="watch_later">Watch later</string>
+    <string name="no_catchup_available">No catch-up available</string>
+    <string name="open_in_external_player">Open in external player</string>
+    <string name="external_players_not_found">External players not found for this format</string>
+    <string name="select_channel_logo">Select channel logo</string>
+    <string name="logos_folder">Logos folder</string>
+    <string name="select_folder_with_logos">Select a folder with logos</string>
+    <string name="logos_priority">Logos priority</string>
+    <string name="prefer_logos_from_playlist">Prefer logos from playlist</string>
+    <string name="prefer_logos_from_folder">Prefer logos from folder</string>
+    <string name="prefer_logos_from_epg">Prefer logos from EPG</string>
+    <string name="logos_priority_hint">Select whether you want to prefer logos specified in the playlists, logos from the local folder or logos specified in EPG. You can override logos priority for individual playlists in the playlist settings.</string>
+    <string name="inexact_matching_logos">Inexact matching for logos files</string>
+    <string name="clear_logos_cache">Clear logos cache</string>
+    <string name="logos_cache_cleared">Logos cache is cleared</string>
+    <string name="channel_name">Channel name</string>
+    <string name="channel_names_editor">Channel names editor</string>
+    <string name="channel_names_editor_hint">Enter the comma separated lists of prefixes and suffixes to remove from channel names, for example, "US:, UK:" and "| HD, | FHD"</string>
+    <string name="prefixes_to_remove">Prefixes to remove</string>
+    <string name="suffixes_to_remove">Suffixes to remove</string>
+    <string name="live">Live</string>
+    <string name="vod">VOD</string>
+    <string name="tv">TV</string>
+    <string name="catchup">Catch-up</string>
+    <string name="hd">HD</string>
+
+    <!-- Empty states -->
+    <string name="no_channels_hint">To watch TV channels, please add a playlist provided by your IPTV service</string>
+    <string name="no_tv_sources">TiViBro doesn\'t provide any sources of TV channels</string>
+    <string name="no_internet_connection">No Internet connection</string>
+    <string name="failed_to_get_data">Failed to get data from server</string>
+
+    <!-- Player -->
+    <string name="play">Play</string>
+    <string name="pause">Pause</string>
+    <string name="play_pause">Play/pause</string>
+    <string name="stop_playback">Stop playback</string>
+    <string name="volume_up">Volume up</string>
+    <string name="volume_down">Volume down</string>
+    <string name="volume_mute">Volume mute</string>
+    <string name="show_menu">Show menu</string>
+    <string name="show_control_panel">Show control panel</string>
+    <string name="show_info_panel">Show info panel</string>
+    <string name="show_info_and_control_panel">Show info panel and control panel</string>
+    <string name="show_program_description">Show program description</string>
+    <string name="return_to_player">Return to player</string>
+    <string name="return_to_current_programs">Return to current programs</string>
+    <string name="restart_current_program">Restart current program</string>
+    <string name="turn_on_next_channel">Turn on next channel</string>
+    <string name="turn_on_previous_channel">Turn on previous channel</string>
+    <string name="show_info_panel_next">Show info panel for next channel</string>
+    <string name="show_info_panel_previous">Show info panel for previous channel</string>
+    <string name="picture_in_picture">Picture-in-picture</string>
+    <string name="switch_to_pip_on_home">Switch to picture-in-picture mode on press Home</string>
+    <string name="sleep_timer">Sleep timer</string>
+    <string name="sleep_timer_is_off">Sleep timer is off</string>
+    <string name="sleep_timer_is_on">Sleep timer is on</string>
+    <string name="sleep_timer_set">Sleep timer is set to %1$d min</string>
+    <string name="min_left">%1$d min left</string>
+    <string name="until_next_app_start">Until next app start</string>
+    <string name="until_program_end">Until program end</string>
+    <string name="subtitles">Subtitles</string>
+    <string name="audio_tracks">Audio tracks</string>
+    <string name="video_tracks">Video tracks</string>
+    <string name="aspect_ratio">Aspect ratio</string>
+    <string name="aspect_fit">Fit screen</string>
+    <string name="aspect_fill">Fill screen</string>
+    <string name="aspect_zoom">Zoom</string>
+    <string name="aspect_best_fit">Best fit</string>
+    <string name="default_source">Default source</string>
+    <string name="use_default_source">Use default source</string>
+    <string name="select_surround_track">Select surround audio track by default</string>
+    <string name="channel_is_unavailable">Channel is unavailable</string>
+    <string name="stream_info">Stream info</string>
+    <string name="video_resolution">Video resolution</string>
+    <string name="show_video_resolution">Show video resolution instead of labels</string>
+    <string name="show_video_resolution_hint">For example, "1920x1080" instead of "FHD"</string>
+    <string name="show_media_properties">Show media properties</string>
+    <string name="multiview">Multiview</string>
+    <string name="enlarge_screen">Enlarge screen</string>
+    <string name="reduce_screen">Reduce screen</string>
+    <string name="full_screen">Full screen</string>
+    <string name="display_mode">Display mode</string>
+    <string name="closed_captions">Closed captions</string>
+    <string name="closed_captions_hint">Closed captions may not always be present despite the available options</string>
+    <string name="system_cc_settings">System settings for closed captions</string>
+    <string name="show_cc_all_channels">Show closed captions for all channels if available</string>
+    <string name="enable_cc_for_tv">Enable for TV</string>
+    <string name="enable_cc_for_vod">Enable for VOD</string>
+    <string name="max_connections_hint">Your IPTV provider may limit the number of concurrent connections</string>
+    <string name="stream_buffering">Buffering…</string>
+    <string name="playback_failed">Playback failed</string>
+
+    <!-- EPG -->
+    <string name="tv_guide">TV guide</string>
+    <string name="watch">Watch</string>
+    <string name="watch_now">Watch now</string>
+    <string name="show_all">Show all</string>
+    <string name="set_all">Set all?</string>
+    <string name="reset_all">Reset all?</string>
+    <string name="today">Today</string>
+    <string name="tomorrow">Tomorrow</string>
+    <string name="yesterday">Yesterday</string>
+    <string name="guide_help_text">&lt;b&gt;OK&lt;/b&gt;: change status&lt;br/&gt;&lt;b&gt;Left&lt;/b&gt;: reset all&lt;br/&gt;&lt;b&gt;Right&lt;/b&gt;: set all</string>
+    <string name="channel_list_help_text">&lt;b&gt;OK&lt;/b&gt;: toggle selection&lt;br/&gt;&lt;b&gt;Left&lt;/b&gt;: selection options&lt;br/&gt;&lt;b&gt;Right&lt;/b&gt;: copy/move</string>
+    <string name="reorder_channels_help">&lt;b&gt;OK&lt;/b&gt;: toggle selection&lt;br/&gt;&lt;b&gt;Up/Down&lt;/b&gt;: move&lt;br/&gt;&lt;b&gt;Left/Right&lt;/b&gt;: move to top/bottom</string>
+    <string name="program_description">Program description</string>
+    <string name="reminder">Remind</string>
+    <string name="reminders">Reminders</string>
+    <string name="my_reminders">My reminders</string>
+    <string name="no_reminders">No reminders</string>
+    <string name="delete_reminder">Delete reminder</string>
+    <string name="delete_reminder_q">Delete reminder?</string>
+    <string name="reminder_is_added">Reminder is added</string>
+    <string name="reminder_is_deleted">Reminder is deleted</string>
+    <string name="remind_before_start">Remind before program start, min</string>
+    <string name="popup_timeout">Popup timeout, sec</string>
+    <string name="default_action">Default action</string>
+    <string name="wake_up_from_sleep">Wake up from sleep mode</string>
+    <string name="in_minutes">in %1$d min</string>
+    <string name="page_scroll_up">Page scroll channels up</string>
+    <string name="page_scroll_down">Page scroll channels down</string>
+    <string name="scroll_next_programs">Scroll to next programs</string>
+    <string name="scroll_previous_programs">Scroll to previous programs</string>
+    <string name="use_back_to_return">Use Back to return to current programs</string>
+    <string name="epg_shift_groups">Show TV guide groups in preview mode</string>
+    <string name="epg_groups_overlay">Show TV guide groups in overlay mode</string>
+    <string name="epg_overlay">Show TV guide in overlay mode</string>
+    <string name="epg_preview">Show TV guide in preview mode</string>
+    <string name="channels_list_overlay">Show channels list in overlay mode</string>
+    <string name="channels_list_preview">Show channels list in preview mode</string>
+    <string name="channels_groups_overlay">Show channels list groups in overlay mode</string>
+    <string name="channels_groups_preview">Show channels list groups in preview mode</string>
+
+    <!-- VOD -->
+    <string name="movies">Movies</string>
+    <string name="shows">Shows</string>
+    <string name="all_movies">All movies</string>
+    <string name="all_shows">All shows</string>
+    <string name="no_movies">No movies</string>
+    <string name="no_shows">No shows</string>
+    <string name="my_movies">My movies</string>
+    <string name="my_shows">My shows</string>
+    <string name="my_tv_programs">My TV programs</string>
+    <string name="my_list">My list</string>
+    <string name="add_to_my_list">Add to My list</string>
+    <string name="added_to_my_list">Added to My list</string>
+    <string name="remove_from_my_list">Remove from My list</string>
+    <string name="removed_from_my_list">Removed from My list</string>
+    <string name="delete_program">Delete program?</string>
+    <string name="delete_all_programs">Delete all programs?</string>
+    <string name="season">Season</string>
+    <string name="episode">Episode</string>
+    <string name="cast">Cast:</string>
+    <string name="director">Director:</string>
+    <string name="trailer">Trailer</string>
+    <string name="failed_to_play_trailer">Failed to play trailer</string>
+    <string name="resume">Resume</string>
+    <string name="play_from_beginning">Play from beginning</string>
+    <string name="autoplay_next_episode">Autoplay next episode</string>
+    <string name="group_movies_by_categories">Group "All movies" by categories</string>
+    <string name="group_shows_by_categories">Group "All shows" by categories</string>
+    <string name="include_tv_channels">Include TV channels</string>
+    <string name="include_vod">Include VOD</string>
+    <string name="categories">Categories</string>
+
+    <!-- Playlists -->
+    <string name="playlists">Playlists</string>
+    <string name="playlist_name">Playlist name</string>
+    <string name="playlist_url">Playlist URL</string>
+    <string name="playlist_type">Playlist type</string>
+    <string name="m3u_playlist">M3U playlist</string>
+    <string name="xtream_codes">Xtream Codes</string>
+    <string name="stalker_portal">Stalker Portal</string>
+    <string name="xtream_parameters">Xtream Codes parameters</string>
+    <string name="stalker_parameters">Stalker Portal parameters</string>
+    <string name="server_address">Server address</string>
+    <string name="username">Username</string>
+    <string name="password">Password</string>
+    <string name="select_local_playlist">Select a local playlist (*.m3u or *.m3u8 file)</string>
+    <string name="paste_playlist_url">Paste playlist URL</string>
+    <string name="paste_from_clipboard">Paste from clipboard</string>
+    <string name="playlist_url_hint">You can edit playlist URL if it has the similar format</string>
+    <string name="enter_url">Enter URL</string>
+    <string name="epg_url_hint">Enter EPG URL for the playlist. You can add or change it later in the settings. XMLTV format is only supported.</string>
+    <string name="add_epg_url">Add EPG URL</string>
+    <string name="update_playlist">Update playlist</string>
+    <string name="update_all_playlists">Update all playlists</string>
+    <string name="playlist_updated">The playlist is successfully updated</string>
+    <string name="playlist_update_failed">Failed to update the playlist. Make sure the playlist is properly formatted and check your Internet connection.</string>
+    <string name="all_playlists_updated">The playlists are successfully updated</string>
+    <string name="all_playlists_update_failed">Failed to update the playlists. Make sure the playlists are properly formatted and check your Internet connection.</string>
+    <string name="playlist_is_processed">Playlist is processed</string>
+    <string name="processing">Processing…</string>
+    <string name="playlist_updating">Playlist updating…</string>
+    <string name="failed_to_add_playlist">Failed to add playlist</string>
+    <string name="delete_playlist">Delete playlist</string>
+    <string name="delete_playlist_q">Delete playlist?</string>
+    <string name="delete_playlist_msg">All channels from the playlist "%1$s" will no longer be available</string>
+    <string name="playlist_error">An error has occurred while processing the playlist. Make sure you have entered the correct data and check your Internet connection.</string>
+    <string name="epg_url_same_exists">EPG source with the same URL already exists</string>
+    <string name="update_interval">Update interval, hours</string>
+    <string name="update_on_app_start">Update on app start</string>
+    <string name="update_on_playlists_change">Update on playlists change</string>
+    <string name="update_options">Update options</string>
+    <string name="playlists_sorting">Playlists sorting</string>
+    <string name="channels_sorting">Channels sorting</string>
+    <string name="groups_sorting">Groups sorting</string>
+    <string name="channels_sorting_hint">This setting defines the global sorting for all groups. You can override the sorting method for individual groups or manually sort channels in the group options.</string>
+    <string name="groups_sorting_hint">This setting defines the global sorting for all playlists. You can override the sorting method for individual playlists or manually sort groups in the playlist settings.</string>
+    <string name="sort_by_name">By name</string>
+    <string name="sort_by_order">By order in playlist</string>
+    <string name="sort_by_date_added">By date added</string>
+    <string name="sort_by_last_modified">By last modified time</string>
+    <string name="sort_by_rating">By rating</string>
+    <string name="sort_by_watch_time">By watch time</string>
+    <string name="manual">Manual</string>
+    <string name="sorting">Sorting</string>
+    <string name="reorder_playlists">Reorder playlists</string>
+    <string name="reorder_groups">Reorder groups</string>
+    <string name="reorder_channels">Reorder channels</string>
+    <string name="reorder_buttons">Reorder buttons</string>
+    <string name="reset_positions">Reset positions</string>
+    <string name="reset_positions_q">Reset positions?</string>
+    <string name="reset_positions_msg">You will lose positions you have customized for channels in the current group</string>
+    <string name="you_will_lose_changes">You will lose changes in the current group</string>
+    <string name="channels_count">Channels: %1$d</string>
+    <string name="movies_count">Movies: %1$d</string>
+    <string name="shows_count">Shows: %1$d</string>
+    <string name="parent_playlist">Parent playlist</string>
+    <string name="assigned_sources">Assigned sources</string>
+    <string name="unassigned_sources">Unassigned sources</string>
+    <string name="change_sources_priority">Change sources priority</string>
+    <string name="enable_playlist">Enable playlist</string>
+    <string name="manage_groups">Manage groups</string>
+    <string name="manage_sources">Manage sources</string>
+    <string name="user_agent">User-Agent</string>
+    <string name="udp_proxy">UDP proxy (address:port)</string>
+    <string name="flussonic">Flussonic</string>
+
+    <!-- EPG sources -->
+    <string name="epg">EPG</string>
+    <string name="epg_sources">EPG sources</string>
+    <string name="add_source">Add source</string>
+    <string name="delete_source">Delete source</string>
+    <string name="delete_source_msg">You will not be able to update EPG from this source anymore</string>
+    <string name="delete_source_q">Delete EPG source?</string>
+    <string name="source_name">Source name</string>
+    <string name="enter_source_name">Enter EPG source name</string>
+    <string name="update_epg">Update EPG</string>
+    <string name="epg_updated">EPG is successfully updated for %1$d channels on %2$s</string>
+    <string name="epg_update_failed">Failed to update EPG from "%1$s" at %2$s. Make sure EPG URL is correct and check your Internet connection.</string>
+    <string name="failed_to_load_epg_channels">Failed to load EPG channels</string>
+    <string name="epg_offset">EPG time offset, h:min</string>
+    <string name="epg_sources_priority">EPG sources priority</string>
+    <string name="epg_sources_hint">EPG sources should be assigned in the playlist settings</string>
+    <string name="unassigned_source_hint">This EPG source is not assigned to any playlist. You can assign it in the playlist settings.</string>
+    <string name="past_days_to_keep">Past days to keep EPG</string>
+    <string name="clear_epg">Clear EPG</string>
+    <string name="store_descriptions">Store program descriptions</string>
+    <string name="full_scan">Full scan</string>
+    <string name="full_scan_hint">By default the app performs partial scanning of EPG source to get the list of channels to ensure maximum performance. For some EPG sources, this may lead to the absence of some channels. If you see that a lot of channels are missing, try a full scan. It may take longer.</string>
+    <string name="assign_epg">Assign EPG</string>
+    <string name="unassign">Unassign</string>
+
+    <!-- Recordings (not implemented yet) -->
+    <string name="recordings">Recordings</string>
+    <string name="recordings_folder">Recordings folder</string>
+    <string name="select_recordings_folder">Select a folder to save the recordings to</string>
+    <string name="no_recordings">No recordings</string>
+    <string name="not_implemented_yet">Not implemented yet</string>
+
+    <!-- Settings -->
+    <string name="settings">Settings</string>
+    <string name="general">General</string>
+    <string name="appearance">Appearance</string>
+    <string name="playback">Playback</string>
+    <string name="player">Player</string>
+    <string name="advanced">Advanced</string>
+    <string name="other">Other</string>
+    <string name="about">About</string>
+    <string name="version">Version</string>
+    <string name="language">Language</string>
+    <string name="system_language">System</string>
+    <string name="clock">Clock</string>
+    <string name="show_clock">Show clock</string>
+    <string name="show_date">Show date on clock</string>
+    <string name="clock_position">Position</string>
+    <string name="top_left">Top left</string>
+    <string name="top_right">Top right</string>
+    <string name="bottom_left">Bottom left</string>
+    <string name="bottom_right">Bottom right</string>
+    <string name="font_size">Font size</string>
+    <string name="small">Small</string>
+    <string name="medium">Medium</string>
+    <string name="large">Large</string>
+    <string name="accent_color">Accent color</string>
+    <string name="selection_color">Selection color</string>
+    <string name="color_theme">Color theme</string>
+    <string name="background_color">Background color</string>
+    <string name="transparency">Transparency</string>
+    <string name="card_style">Card style</string>
+    <string name="animated_transition">Animated transition</string>
+    <string name="animated_channels_scrolling">Animated channels scrolling</string>
+    <string name="ui_transparency">User interface transparency, %</string>
+    <string name="show_channel_names">Show channel names</string>
+    <string name="show_channel_numbers">Show channel numbers</string>
+    <string name="two_line_channel_names">Two-line channel names</string>
+    <string name="two_line_program_titles">Two-line program titles</string>
+    <string name="show_playlist_and_group_name">Show playlist and group name</string>
+    <string name="show_current_programs">Show current programs</string>
+    <string name="show_programs">Show programs</string>
+    <string name="show_catchup_icon">Show catch-up icon in channels list</string>
+    <string name="show_all_channels_category">Show "All channels" category</string>
+    <string name="show_all_playlists_category">Show "All playlists" category</string>
+    <string name="show_favorites_category">Show "Favorites" category</string>
+    <string name="show_history_button">Show "History" button</string>
+    <string name="show_tv_guide_button">Show "TV guide" button</string>
+    <string name="show_newly_added_groups">Show newly added groups</string>
+    <string name="show_current_time_indicator">Show current time indicator at full height</string>
+    <string name="highlight_current_channel">Highlight current channel in color</string>
+    <string name="highlight_current_programs">Highlight current programs</string>
+    <string name="highlight_current_programs_color">Highlight current programs in color</string>
+    <string name="highlight_progress_only">Highlight progress only</string>
+    <string name="dim_past_programs">Dim past programs</string>
+    <string name="show_past_programs">Show past programs without catch-up</string>
+    <string name="show_description_when_switching">Show description when switching channels only</string>
+    <string name="show_info_at_bottom">Show info panel at the bottom when switching channels</string>
+    <string name="overlay_mode">Overlay mode</string>
+    <string name="preview_mode">Preview mode</string>
+    <string name="auto_start_on_boot">Auto start app on boot</string>
+    <string name="auto_start_on_wake">Auto start app on wake up from sleep mode</string>
+    <string name="auto_start_on_wake_hint">May not work on all devices</string>
+    <string name="turn_on_last_channel">Turn on last channel on app start</string>
+    <string name="autoplay_channels">Autoplay channels</string>
+    <string name="stay_on_list">Stay on list when switching channels</string>
+    <string name="stay_on_search">Stay on search screen when switching channels</string>
+    <string name="stay_on_guide">Stay on TV guide when switching channels</string>
+    <string name="stay_on_guide_overlay">Stay on TV guide when switching channels in overlay mode</string>
+    <string name="long_back_to_player">Long press Back button to return to the player</string>
+    <string name="confirm_exit">Confirm exit by second press Back</string>
+    <string name="press_again_to_exit">Press again to exit</string>
+    <string name="show_black_screen">Show black screen when switching channels</string>
+    <string name="switch_delay">Delay before switching, sec</string>
+    <string name="display_change_timeout">Full screen switching timeout, sec</string>
+    <string name="panels_timeout">Panels timeout, sec</string>
+    <string name="history_delay">Delay before adding to history, sec</string>
+    <string name="recent_channel_count">Recent channel count</string>
+    <string name="history_day_count">History day count</string>
+    <string name="remove_from_history">Remove from History</string>
+    <string name="skip_steps">Skip steps</string>
+    <string name="skip_step_rw">Skip step for RW button</string>
+    <string name="skip_step_ff">Skip step for FF button</string>
+    <string name="skip_step_tb_back">Skip step for time bar (backward)</string>
+    <string name="skip_step_tb_forward">Skip step for time bar (forward)</string>
+    <string name="seeking_options">Seeking options</string>
+    <string name="engine">Engine</string>
+    <string name="engine_exoplayer">ExoPlayer (Media3)</string>
+    <string name="engine_vlc">VLC</string>
+    <string name="buffer_size">Buffer size</string>
+    <string name="buffer_size_hint">The buffer size determines duration of video that must be downloaded to start playback. Try increasing this size if you frequently see buffering while watching. This can increase the channel switching time.</string>
+    <string name="very_small">Very small</string>
+    <string name="small_buffer">Small</string>
+    <string name="medium_buffer">Medium</string>
+    <string name="large_buffer">Large</string>
+    <string name="very_large">Very large</string>
+    <string name="video_decoder">Video decoder</string>
+    <string name="video_decoder_hint">Try the software video decoder if your device has issues when decoding video using the hardware decoder</string>
+    <string name="audio_decoder">Audio decoder</string>
+    <string name="audio_decoder_hint">Try the software audio decoder if your device has issues when decoding audio using the hardware decoder</string>
+    <string name="auto_frame_rate">Auto frame rate (AFR)</string>
+    <string name="auto_frame_rate_hint">Turn on this setting to switch TV refresh rate to match the video frame rate. This can make playback more smooth. Note that not all devices support auto frame rate.</string>
+    <string name="tunneled_playback">Tunneled playback</string>
+    <string name="audio_passthrough">Audio passthrough</string>
+    <string name="amlogic_fix">Amlogic fix</string>
+    <string name="amlogic_fix_hint">Some devices based on Amlogic chipset can have bad picture quality during playback (stuttering, freezing or similar). Enabling this setting can improve video playback.</string>
+    <string name="use_external_player">Use external player</string>
+    <string name="external_player_app">External player application</string>
+    <string name="remote_control">Remote control</string>
+    <string name="remote_center">Center button (OK)</string>
+    <string name="remote_left">Left arrow</string>
+    <string name="remote_right">Right arrow</string>
+    <string name="remote_up">Up arrow</string>
+    <string name="remote_down">Down arrow</string>
+    <string name="remote_control_hint">Press a button on the remote, then OK to assign the action</string>
+    <string name="restore_remote_defaults">Restore to defaults</string>
+    <string name="restore_remote_defaults_msg">You will lose your remote control customizations</string>
+    <string name="restore_remote_defaults_q">Restore to defaults?</string>
+    <string name="hidden_buttons">Hidden buttons</string>
+    <string name="visible_buttons">Visible buttons</string>
+    <string name="parental_controls">Parental controls</string>
+    <string name="require_pin_for">Require PIN for</string>
+    <string name="set_pin_to_continue">To set parental controls, create PIN</string>
+    <string name="create_pin">Create PIN</string>
+    <string name="change_pin">Change PIN</string>
+    <string name="enter_pin">Enter PIN</string>
+    <string name="enter_current_pin">Enter current PIN</string>
+    <string name="enter_new_pin">Enter new PIN</string>
+    <string name="confirm_pin">Confirm PIN</string>
+    <string name="pin_does_not_match">"PIN doesn\'t match. Try again."</string>
+    <string name="pin_wrong">PIN is wrong. Try again.</string>
+    <string name="pin_wrong_attempts">You entered the wrong PIN 5 times. Try again in %1$d sec.</string>
+    <string name="pin_input_method">PIN input method</string>
+    <string name="press_ok_to_enter_pin">Press OK to enter PIN</string>
+    <string name="always_require">Always require</string>
+    <string name="not_require_for_channels_only">"Don\'t require for channels only"</string>
+    <string name="not_require_after_unlocking">"Don\'t require PIN after unlocking"</string>
+    <string name="until_switching_to_not_blocked">Until switching to not blocked channel</string>
+    <string name="reset_watch_time">Reset watch time</string>
+    <string name="reset_watch_time_q">Reset watch time?</string>
+    <string name="reset_watch_time_msg">You will lose watch time statistics for all channels</string>
+    <string name="back_up_data">Back up data</string>
+    <string name="restore_data">Restore data</string>
+    <string name="backup_created">Backup created successfully</string>
+    <string name="data_restored">Data restored successfully</string>
+    <string name="failed_to_create_backup">Failed to create backup</string>
+    <string name="failed_to_restore_data">Failed to restore data</string>
+    <string name="creating_backup">Creating backup…</string>
+    <string name="restoring_data">Restoring data…</string>
+    <string name="no_backup_found">No backup archives found</string>
+    <string name="restore_data_hint">Your current data and settings will be replaced with data and settings from the backup. The app will be restarted to finish the restoring process. You may need to manually start it.</string>
+    <string name="restore_data_q">Restore data?</string>
+    <string name="select_backup_file">Select a backup file</string>
+    <string name="select_local_backup">Select local backup</string>
+    <string name="backup_file">Backup file</string>
+    <string name="backup_link_hint">Enter link to a backup file, e.g. on Dropbox or Google Drive, or select a local backup file</string>
+    <string name="restart_required">The app needs to be restarted for the changes to take effect. You may need to manually start it.</string>
+    <string name="restart">Restart</string>
+    <string name="restart_app_q">Restart app?</string>
+    <string name="exit">Exit</string>
+    <string name="check_for_new_version">Check for new version</string>
+    <string name="no_new_version">No new version</string>
+    <string name="send_logs">Send logs</string>
+    <string name="logs_sent">Logs sent</string>
+    <string name="send_statistics">Send anonymous statistics to improve the app</string>
+    <string name="grant_storage_permission">Grant Storage permission</string>
+    <string name="for_alarms_permission">For the app to operate correctly, please allow TiViBro to set alarms and reminders</string>
+    <string name="for_storage_permission">For the app to operate correctly, please allow TiViBro to access all files</string>
+    <string name="keyboard">Keyboard</string>
+    <string name="hardware">Hardware</string>
+    <string name="transparency_percent">%1$d%%</string>
+    <string name="resume_from">Resume from %1$s</string>
+    <string name="duration_hm">%1$dh %2$dm</string>
+
+    <!-- Remote actions (used in settings list) -->
+    <string name="action_up">Up</string>
+    <string name="action_down">Down</string>
+    <string name="action_left">Left</string>
+    <string name="action_right">Right</string>
+    <string name="action_ok">OK</string>
+    <string name="action_menu">Menu</string>
+    <string name="action_back">Back</string>
+    <string name="action_backspace">Backspace</string>
+    <string name="action_play_pause">Play/Pause</string>
+    <string name="action_stop">Stop</string>
+    <string name="action_rewind">Rewind (RW)</string>
+    <string name="action_fast_forward">Fast forward (FF)</string>
+    <string name="action_mute">Mute</string>
+    <string name="action_volume_up">Volume up</string>
+    <string name="action_volume_down">Volume down</string>
+    <string name="action_pg_up">Pg+ (Ch+)</string>
+    <string name="action_pg_down">Pg- (Ch-)</string>
+    <string name="action_rec">Record</string>
+    <string name="action_long_ok">Long OK</string>
+    <string name="action_long_up">Long Up</string>
+    <string name="action_long_down">Long Down</string>
+    <string name="action_long_left">Long Left</string>
+    <string name="action_long_right">Long Right</string>
+    <string name="action_long_back">Long Back</string>
+    <string name="action_long_menu">Long Menu</string>
+    <string name="action_long_play_pause">Long Play/Pause</string>
+
+    <string-array name="language_entries">
+        <item>System</item>
+        <item>English</item>
+        <item>Русский</item>
+    </string-array>
+    <string-array name="language_values">
+        <item>system</item>
+        <item>en</item>
+        <item>ru</item>
+    </string-array>
+
+    <string-array name="sort_entries">
+        <item>@string/sort_by_name</item>
+        <item>@string/sort_by_order</item>
+        <item>@string/sort_by_date_added</item>
+        <item>@string/sort_by_last_modified</item>
+        <item>@string/sort_by_rating</item>
+        <item>@string/sort_by_watch_time</item>
+        <item>@string/manual</item>
+    </string-array>
+    <string-array name="sort_values">
+        <item>name</item>
+        <item>order</item>
+        <item>date_added</item>
+        <item>last_modified</item>
+        <item>rating</item>
+        <item>watch_time</item>
+        <item>manual</item>
+    </string-array>
+
+    <string-array name="color_theme_entries">
+        <item>Dark</item>
+        <item>Dark grey</item>
+        <item>Blue</item>
+        <item>Blue grey</item>
+        <item>Indigo</item>
+        <item>Teal</item>
+        <item>Cyan</item>
+        <item>Green</item>
+        <item>Amber</item>
+        <item>Red</item>
+        <item>Black</item>
+        <item>Grey</item>
+        <item>White</item>
+    </string-array>
+    <string-array name="color_theme_values">
+        <item>dark</item>
+        <item>dark_grey</item>
+        <item>blue</item>
+        <item>blue_grey</item>
+        <item>indigo</item>
+        <item>teal</item>
+        <item>cyan</item>
+        <item>green</item>
+        <item>amber</item>
+        <item>red</item>
+        <item>black</item>
+        <item>grey</item>
+        <item>white</item>
+    </string-array>
+
+    <string-array name="font_size_entries">
+        <item>Small</item>
+        <item>Medium</item>
+        <item>Large</item>
+    </string-array>
+    <string-array name="font_size_values">
+        <item>0.875</item>
+        <item>1.0</item>
+        <item>1.125</item>
+    </string-array>
+
+    <string-array name="buffer_entries">
+        <item>Small</item>
+        <item>Medium</item>
+        <item>Large</item>
+        <item>Very large</item>
+        <item>Maximum</item>
+    </string-array>
+    <string-array name="buffer_values">
+        <item>2500</item>
+        <item>5000</item>
+        <item>10000</item>
+        <item>20000</item>
+        <item>40000</item>
+    </string-array>
+
+    <string-array name="engine_entries">
+        <item>ExoPlayer (Media3)</item>
+        <item>VLC</item>
+    </string-array>
+    <string-array name="engine_values">
+        <item>exo</item>
+        <item>vlc</item>
+    </string-array>
+
+    <string-array name="skipped_step_entries">
+        <item>5</item>
+        <item>10</item>
+        <item>15</item>
+        <item>30</item>
+        <item>60</item>
+    </string-array>
+    <string-array name="skipped_step_values">
+        <item>5</item>
+        <item>10</item>
+        <item>15</item>
+        <item>30</item>
+        <item>60</item>
+    </string-array>
+
+    <string-array name="pin_method_entries">
+        <item>Simple PIN</item>
+        <item>4 digits</item>
+    </string-array>
+    <string-array name="pin_method_values">
+        <item>simple</item>
+        <item>numeric</item>
+    </string-array>
+
+    <string-array name="remote_action_entries">
+        <item>Show info</item>
+        <item>Show channel list</item>
+        <item>Volume up</item>
+        <item>Volume down</item>
+        <item>Previous channel</item>
+        <item>Next channel</item>
+        <item>Pause / Play</item>
+        <item>Open menu</item>
+        <item>None</item>
+    </string-array>
+    <string-array name="remote_action_values">
+        <item>show_info</item>
+        <item>show_channels</item>
+        <item>volume_up</item>
+        <item>volume_down</item>
+        <item>prev_channel</item>
+        <item>next_channel</item>
+        <item>pause</item>
+        <item>show_menu</item>
+        <item>none</item>
+    </string-array>
+
+    <!-- Internal / notifications -->
+    <string name="channel_reminders">Program reminders</string>
+    <string name="channel_updates">Service messages</string>
+    <string name="keep_screen_on">Keeping the screen on</string>
+    <string name="updating_playlists">Updating playlists, %1$d/%2$d</string>
+    <string name="app_updated">Update finished</string>
+    <string name="channel_moved_up">Channel moved up</string>
+    <string name="channels_moved_to_top">%1$d channels moved to top</string>
+    <string name="nothing_to_show">Nothing to show</string>
+    <string name="all">All</string>
+    <string name="no_group">No group</string>
+    <string name="open">Open</string>
+    <string name="group">Group</string>
+    <string name="time">Time</string>
+    <string name="now">Now</string>
+    <string name="start">Start</string>
+    <string name="end">End</string>
+    <string name="sort">Sort</string>
+    <string name="settings_saved">Settings saved</string>
+    <string name="select_source">Select source</string>
+    <string name="current_program">Current program</string>
+    <string name="next_program">Next program</string>
+    <string name="no_next_program">No next program</string>
+    <string name="buffering">Buffering…</string>
+    <string name="no_video">No video</string>
+    <string name="tuning">Tuning…</string>
+    <string name="epg_is_empty">EPG is empty</string>
+    <string name="channel_hidden">Channel is hidden</string>
+    <string name="playlist_name_hint">Enter playlist name</string>
+    <string name="name_required">Enter a name</string>
+    <string name="url_required">Enter a URL</string>
+    <string name="test_connection">Test connection</string>
+    <string name="connection_ok">Connection is OK</string>
+    <string name="connection_failed">Connection failed</string>
+    <string name="my_account">My account</string>
+    <string name="no_tv_sources_hint">Add a playlist to watch TV channels</string>
+    <string name="pin_required">PIN required</string>
+    <string name="incorrect_pin">Incorrect PIN</string>
+    <string name="hide_playlist">Hide playlist</string>
+    <string name="show_playlist">Show playlist</string>
+    <string name="playlist_deleted">Playlist is deleted</string>
+    <string name="epg_source_added">EPG source is added</string>
+    <string name="group_added">Group is added</string>
+    <string name="moved">Moved</string>
+    <string name="enter_pin_to_continue">Enter PIN to continue</string>
+    <string name="hours_minutes">Hours and minutes</string>
+    <string name="select_time">Select time</string>
+    <string name="remove_channel_from_history">Remove channel from History</string>
+    <string name="reset_watch_time_all">Reset watch time for all channels</string>
+    <string name="watch_time_reset">Watch time has been reset</string>
+    <string name="play_all">Play all</string>
+    <string name="volume">Volume</string>
+    <string name="software">Software</string>
+    <string name="episodes">Episodes</string>
+    <string name="pin">PIN</string>
+    <string name="pin_code">PIN code</string>
+    <string name="wrong_pin">Wrong PIN code</string>
+    <string name="channel_is_protected">This channel is protected by a PIN code</string>
+    <string name="m3u_parameters">M3U playlist parameters</string>
+    <string name="select_playlist_type">Select the playlist type</string>
+    <string name="optional_field">%s (optional)</string>
+    <string name="m3u_parameters_hint">Enter the playlist name and the direct link to your M3U file. You can also add an XMLTV EPG link.</string>
+    <string name="xtream_parameters_hint">Enter the server address, login and password of your Xtream Codes API.</string>
+    <string name="stalker_parameters_hint">Enter the portal address and the MAC address of your device. Stalker portals are detected automatically.</string>
+    <string name="connecting">Connecting…</string>
+    <string name="channels_found">%1$d channels found</string>
+    <string name="connection_successful">Connection successful</string>
+    <string name="pin_code_hint">Requests a PIN code before playing channels. Leave the field empty to disable it.</string>
+    <string name="show_description_when_switching_channels_only">Show description when switching channels only</string>
+    <string name="channel_logo">Channel logo</string>
+    <string name="app_logo">App logo</string>
+    <string name="switch_desc_lines">Max lines of program description in info popup</string>
+</resources>

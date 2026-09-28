@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <dimen name="icon_sm">24dp</dimen>
+    <dimen name="icon_md">32dp</dimen>
+    <dimen name="icon_lg">48dp</dimen>
+
+    <dimen name="touch_target">48dp</dimen>
+    <dimen name="row_min_height">56dp</dimen>
+    <dimen name="channel_row_min_height">64dp</dimen>
+    <dimen name="logo_size">48dp</dimen>
+    <dimen name="logo_frame">64dp</dimen>
+    <dimen name="epg_logo_w">72dp</dimen>
+    <dimen name="epg_logo_h">48dp</dimen>
+    <dimen name="card_size">128dp</dimen>
+
+    <dimen name="header_height">56dp</dimen>
+    <dimen name="bottom_nav_height">64dp</dimen>
+    <dimen name="player_controls_height">60dp</dimen>
+    <dimen name="timebar_height">24dp</dimen>
+    <dimen name="progress_rule">2dp</dimen>
+
+    <dimen name="text_xxl">32sp</dimen>
+    <dimen name="text_xl">28sp</dimen>
+    <dimen name="text_lg">20sp</dimen>
+    <dimen name="text_md">16sp</dimen>
+    <dimen name="text_sm">14sp</dimen>
+    <dimen name="text_xs">13sp</dimen>
+    <dimen name="text_xxs">12sp</dimen>
+
+    <dimen name="spacing_xs">2dp</dimen>
+    <dimen name="spacing_sm">4dp</dimen>
+    <dimen name="spacing_md">8dp</dimen>
+    <dimen name="spacing_lg">16dp</dimen>
+    <dimen name="spacing_xl">24dp</dimen>
+    <dimen name="spacing_xxl">32dp</dimen>
+
+    <dimen name="corner_sm">4dp</dimen>
+    <dimen name="corner_md">8dp</dimen>
+    <dimen name="corner_lg">12dp</dimen>
+
+    <dimen name="channel_grid_columns">5</dimen>
+    <dimen name="search_field_height">36dp</dimen>
+    <dimen name="epg_hour_width">160dp</dimen>
+</resources>

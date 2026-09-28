@@ -1,0 +1,155 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:app="http://schemas.android.com/apk/res-auto" xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:keepScreenOn="true">
+
+    <!-- Top bar -->
+    <LinearLayout
+        android:id="@+id/top_bar"
+        android:layout_width="match_parent"
+        android:layout_height="@dimen/header_height"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="@dimen/spacing_lg"
+        android:paddingEnd="@dimen/spacing_lg"
+        android:background="@drawable/osd_scrim_bottom">
+
+        <ImageView
+            android:id="@+id/app_logo"
+            android:layout_width="28dp"
+            android:layout_height="28dp"
+            android:contentDescription="@string/app_name"
+            android:src="@drawable/ic_live_tv"
+            app:tint="@color/accent" />
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="@dimen/spacing_md"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/title"
+                style="@style/TvBro.Text.Title"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/app_name" />
+
+            <TextView
+                android:id="@+id/subtitle"
+                style="@style/TvBro.Text.Time"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                tools:text="1st Playlist / Sports" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/nav_buttons"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:gravity="center_vertical"
+            android:orientation="horizontal" />
+
+        <LinearLayout
+            android:id="@+id/clock_container"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="@dimen/spacing_lg"
+            android:gravity="end"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/clock"
+                style="@style/TvBro.Text.Title"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                tools:text="20:15" />
+
+            <TextView
+                android:id="@+id/clock_date"
+                style="@style/TvBro.Text.Time"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                tools:text="Sat, 12 Oct" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- Content -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:orientation="horizontal">
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/groups_list"
+            android:layout_width="@dimen/card_size"
+            android:layout_height="match_parent"
+            android:background="@drawable/osd_scrim_top"
+            android:clipToPadding="false"
+            android:paddingStart="@dimen/spacing_sm"
+            android:paddingTop="@dimen/spacing_sm"
+            android:paddingEnd="@dimen/spacing_sm"
+            android:paddingBottom="@dimen/spacing_sm"
+            android:scrollbars="none" />
+
+        <FrameLayout
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1">
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/channels_list"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:clipToPadding="false"
+                android:padding="@dimen/spacing_sm"
+                android:scrollbars="none" />
+
+            <TextView
+                android:id="@+id/empty_view"
+                style="@style/TvBro.Text.Subtitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:gravity="center"
+                android:padding="@dimen/spacing_xl"
+                android:text="@string/no_channels"
+                android:visibility="gone" />
+        </FrameLayout>
+    </LinearLayout>
+
+    <!-- Bottom status line -->
+    <LinearLayout
+        android:id="@+id/status_bar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="@dimen/spacing_lg"
+        android:paddingEnd="@dimen/spacing_lg"
+        android:paddingTop="@dimen/spacing_xs"
+        android:paddingBottom="@dimen/spacing_xs"
+        android:background="@drawable/osd_scrim_bottom">
+
+        <TextView
+            android:id="@+id/status_text"
+            style="@style/TvBro.Text.Time"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            tools:text="150 channels" />
+
+        <TextView
+            android:id="@+id/status_hint"
+            style="@style/TvBro.Text.Time"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/press_ok_to_turn_on" />
+    </LinearLayout>
+</LinearLayout>

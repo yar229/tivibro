@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:minWidth="480dp"
+    android:orientation="vertical"
+    android:background="@drawable/bg_dialog_panel"
+    android:padding="@dimen/spacing_lg">
+
+    <TextView
+        android:id="@+id/wizard_title"
+        style="@style/TvBro.DialogTitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        tools:text="Playlist type" />
+
+    <TextView
+        android:id="@+id/wizard_message"
+        style="@style/TvBro.DialogText"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/spacing_xs"
+        android:visibility="gone"
+        tools:text="Select the playlist type" />
+
+    <LinearLayout
+        android:id="@+id/wizard_fields"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/spacing_md"
+        android:orientation="vertical" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/spacing_lg"
+        android:gravity="end"
+        android:orientation="horizontal">
+
+        <TextView
+            android:id="@+id/wizard_status"
+            style="@style/TvBro.Text.Time"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_gravity="center_vertical"
+            android:visibility="gone"
+            tools:text="Connected" />
+
+        <Button
+            android:id="@+id/button_test"
+            style="@style/TvBro.Button.Text"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/test_connection"
+            android:visibility="gone" />
+
+        <Button
+            android:id="@+id/button_cancel"
+            style="@style/TvBro.Button.Text"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/cancel" />
+
+        <Button
+            android:id="@+id/button_ok"
+            style="@style/TvBro.Button"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="@dimen/spacing_md"
+            android:text="@string/next" />
+    </LinearLayout>
+</LinearLayout>

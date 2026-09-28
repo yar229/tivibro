@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:app="http://schemas.android.com/apk/res-auto" xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_margin="@dimen/spacing_xs"
+    android:orientation="vertical"
+    android:background="@drawable/bg_card_channel"
+    android:focusable="true"
+    android:focusableInTouchMode="true"
+    android:padding="@dimen/spacing_sm">
+
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="@dimen/logo_frame">
+
+        <ImageView
+            android:id="@+id/channel_logo"
+            android:layout_width="@dimen/logo_frame"
+            android:layout_height="@dimen/logo_frame"
+            android:layout_gravity="center"
+            android:contentDescription="@null"
+            android:scaleType="fitCenter"
+            android:src="@drawable/ic_logo_channel" />
+
+        <ImageView
+            android:id="@+id/badge_favorite"
+            android:layout_width="18dp"
+            android:layout_height="18dp"
+            android:layout_gravity="top|end"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_star"
+            app:tint="@color/warning"
+            android:visibility="gone" />
+
+        <ImageView
+            android:id="@+id/badge_hd"
+            android:layout_width="20dp"
+            android:layout_height="20dp"
+            android:layout_gravity="bottom|end"
+            android:background="@drawable/bg_badge_live"
+            android:contentDescription="@null"
+            android:padding="2dp"
+            android:src="@drawable/ic_hd"
+            app:tint="@color/text_on_primary"
+            android:visibility="gone" />
+    </FrameLayout>
+
+    <TextView
+        android:id="@+id/channel_name"
+        style="@style/TvBro.Text.Channel"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/spacing_xs"
+        android:gravity="center"
+        tools:text="Sky Sports Main Event" />
+
+    <TextView
+        android:id="@+id/channel_number"
+        style="@style/TvBro.Text.Time"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:visibility="gone"
+        tools:text="101" />
+
+    <TextView
+        android:id="@+id/program_title"
+        style="@style/TvBro.Text.Program"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:maxLines="2"
+        android:visibility="gone"
+        tools:text="Live: Premier League" />
+
+    <TextView
+        android:id="@+id/program_time"
+        style="@style/TvBro.Text.Time"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:visibility="gone"
+        tools:text="20:15 - 21:00" />
+
+    <ProgressBar
+        android:id="@+id/progress"
+        style="?android:attr/progressBarStyleHorizontal"
+        android:layout_width="match_parent"
+        android:layout_height="@dimen/progress_rule"
+        android:layout_marginTop="@dimen/spacing_xs"
+        android:max="100"
+        android:progressDrawable="@drawable/bg_progress_bar"
+        android:visibility="gone" />
+
+    <LinearLayout
+        android:id="@+id/badges"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:orientation="horizontal"
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/badge_catchup"
+            style="@style/TvBro.Badge"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_badge_catchup"
+            android:text="@string/catchup"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/badge_vod"
+            style="@style/TvBro.Badge"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="@dimen/spacing_xs"
+            android:background="@drawable/bg_badge_vod"
+            android:text="@string/vod"
+            android:visibility="gone" />
+    </LinearLayout>
+</LinearLayout>

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- android:titleTextColor in preference categories is available from API 23 -->
+    <style name="TvBro.PreferenceCategory" parent="">
+        <item name="android:background">@android:color/transparent</item>
+        <item name="android:titleTextColor">@color/accent</item>
+        <item name="titleTextAppearance">@style/TvBro.PreferenceCategoryTitle</item>
+    </style>
+
+</resources>

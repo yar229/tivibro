@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Base palette sampled from the reference application theme -->
+    <color name="bg_app">#FF0F141B</color>
+    <color name="bg_app_gradient_end">#FF1A2430</color>
+    <color name="surface">#FF1C232C</color>
+    <color name="surface_elevated">#FF2C333C</color>
+    <color name="surface_high">#FF3C434C</color>
+    <color name="outline">#FF3C434C</color>
+
+    <color name="primary">#FF3F51B5</color>
+    <color name="primary_dark">#FF2E4677</color>
+    <color name="primary_light">#FF3B5998</color>
+    <color name="accent">#FF2196F3</color>
+    <color name="accent_dark">#FF142B3D</color>
+    <color name="focus">#FF29577B</color>
+
+    <color name="live_badge">#FF3F51B5</color>
+    <color name="vod_badge">#FF2196F3</color>
+    <color name="catchup_badge">#FF1D873B</color>
+    <color name="rec_badge">#FFF44336</color>
+
+    <color name="text_primary">#FFFFFFFF</color>
+    <color name="text_secondary">#B3FFFFFF</color>
+    <color name="text_tertiary">#80FFFFFF</color>
+    <color name="text_disabled">#4DFFFFFF</color>
+    <color name="text_on_primary">#FFFFFFFF</color>
+
+    <color name="scrim">#B3000000</color>
+    <color name="panel">#CC0F141B</color>
+    <color name="panel_solid">#FF0F141B</color>
+    <color name="divider">#33FFFFFF</color>
+    <color name="focus_frame">#FF3B5998</color>
+    <color name="error">#FFF44336</color>
+    <color name="warning">#FFFFC107</color>
+
+    <color name="nav_label">#FFFFFFFF</color>
+    <color name="nav_label_inactive">#8AFFFFFF</color>
+    <color name="subtitle_bg">#99000000</color>
+    <color name="epg_now">#FF3B5998</color>
+    <color name="epg_past">#401C232C</color>
+</resources>
