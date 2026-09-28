@@ -24,7 +24,6 @@
             android:layout_width="320dp"
             android:layout_height="match_parent"
             android:background="@drawable/bg_side_channels"
-            android:paddingTop="@dimen/header_height"
             android:paddingBottom="@dimen/spacing_lg"
             android:scrollbars="none"
             android:focusable="true"
