@@ -155,8 +155,8 @@ class Prefs private constructor(context: Context) {
         set(v) = sp.edit { putString(KEY_ENGINE, v) }
 
     var bufferSizeMs: Int
-        get() = sp.getInt(KEY_BUFFER, DEFAULT_BUFFER_MS).coerceIn(MIN_BUFFER_MS, MAX_BUFFER_MS)
-        set(v) = sp.edit { putInt(KEY_BUFFER, v.coerceIn(MIN_BUFFER_MS, MAX_BUFFER_MS)) }
+        get() = sp.getInt(KEY_BUFFER, DEFAULT_BUFFER_MS).sanitizedBufferMs()
+        set(v) = sp.edit { putInt(KEY_BUFFER, v.sanitizedBufferMs()) }
 
     var videoDecoder: String
         get() = sp.getString(KEY_VIDEO_DECODER, "hardware") ?: "hardware"
@@ -642,3 +642,12 @@ class Prefs private constructor(context: Context) {
 const val MIN_BUFFER_MS = 2500
 const val MAX_BUFFER_MS = 60_000
 const val DEFAULT_BUFFER_MS = 5000
+
+/** Sentinel for the "no buffering" option: play straight from the live edge. */
+const val NO_BUFFER_MS = 0
+
+/**
+ * [NO_BUFFER_MS] is passed through untouched because it selects a dedicated zero-buffer
+ * load control, while every other value stays inside the range Media3 accepts.
+ */
+fun Int.sanitizedBufferMs(): Int = if (this == NO_BUFFER_MS) NO_BUFFER_MS else coerceIn(MIN_BUFFER_MS, MAX_BUFFER_MS)

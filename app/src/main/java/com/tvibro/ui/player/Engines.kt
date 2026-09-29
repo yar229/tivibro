@@ -34,6 +34,7 @@ import androidx.media3.ui.PlayerView
 import com.tvibro.R
 import com.tvibro.data.MAX_BUFFER_MS
 import com.tvibro.data.MIN_BUFFER_MS
+import com.tvibro.data.NO_BUFFER_MS
 import org.videolan.libvlc.LibVLC
 import org.videolan.libvlc.Media
 import org.videolan.libvlc.MediaPlayer
@@ -113,6 +114,14 @@ class ExoEngine(
          * and maxBuffer >= minBuffer, so every value coming from settings is sanitized.
          */
         fun buildLoadControl(bufferMs: Int): LoadControl {
+            if (bufferMs == NO_BUFFER_MS) {
+                // "No buffering": start at the first available byte and keep nothing queued,
+                // so the picture stays as close to the live edge as the network allows.
+                return DefaultLoadControl.Builder()
+                    .setBufferDurationsMs(0, 0, 0, 0)
+                    .setPrioritizeTimeOverSizeThresholds(true)
+                    .build()
+            }
             val minBuffer = bufferMs.coerceIn(MIN_BUFFER_MS, MAX_BUFFER_MS)
             val maxBuffer = (minBuffer * 5).coerceAtLeast(minBuffer + 10_000)
             val bufferForPlayback = 1500.coerceAtMost(minBuffer)

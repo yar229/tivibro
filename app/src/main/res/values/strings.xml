@@ -496,7 +496,8 @@
     <string name="engine_exoplayer">ExoPlayer (Media3)</string>
     <string name="engine_vlc">VLC</string>
     <string name="buffer_size">Buffer size</string>
-    <string name="buffer_size_hint">The buffer size determines duration of video that must be downloaded to start playback. Try increasing this size if you frequently see buffering while watching. This can increase the channel switching time.</string>
+    <string name="buffer_size_hint">The buffer size determines duration of video that must be downloaded to start playback. Try increasing this size if you frequently see buffering while watching. This can increase the channel switching time. \"No buffering\" plays straight from the live edge with the lowest possible delay, but any network hiccup will cause visible stutters.</string>
+    <string name="no_buffering">No buffering</string>
     <string name="very_small">Very small</string>
     <string name="small_buffer">Small</string>
     <string name="medium_buffer">Medium</string>
@@ -682,20 +683,22 @@
         <item>1.25</item>
     </string-array>
 
-    <string-array name="buffer_entries">
-        <item>Small</item>
-        <item>Medium</item>
-        <item>Large</item>
-        <item>Very large</item>
-        <item>Maximum</item>
-    </string-array>
-    <string-array name="buffer_values">
-        <item>2500</item>
-        <item>5000</item>
-        <item>10000</item>
-        <item>20000</item>
-        <item>40000</item>
-    </string-array>
+        <string-array name="buffer_entries">
+            <item>@string/no_buffering</item>
+            <item>Small</item>
+            <item>Medium</item>
+            <item>Large</item>
+            <item>Very large</item>
+            <item>Maximum</item>
+        </string-array>
+        <string-array name="buffer_values">
+            <item>0</item>
+            <item>2500</item>
+            <item>5000</item>
+            <item>10000</item>
+            <item>20000</item>
+            <item>40000</item>
+        </string-array>
 
     <string-array name="engine_entries">
         <item>ExoPlayer (Media3)</item>

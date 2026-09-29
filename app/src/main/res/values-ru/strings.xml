@@ -476,7 +476,8 @@
     <string name="engine_exoplayer">ExoPlayer (Media3)</string>
     <string name="engine_vlc">VLC</string>
     <string name="buffer_size">Размер буфера</string>
-    <string name="buffer_size_hint">Размер буфера определяет объём видео, который должен быть загружен для начала воспроизведения. Увеличьте его, если часто наблюдается буферизация. Это может увеличить время переключения каналов.</string>
+    <string name="buffer_size_hint">Размер буфера определяет объём видео, который должен быть загружен для начала воспроизведения. Увеличьте его, если часто наблюдается буферизация. Это может увеличить время переключения каналов. «Без буферизации» играет прямо с живого края потока с минимальной задержкой, но любая сетевая помеха будет видна как подёргивания.</string>
+    <string name="no_buffering">Без буферизации</string>
     <string name="very_small">Очень маленький</string>
     <string name="small_buffer">Маленький</string>
     <string name="medium_buffer">Средний</string>
@@ -667,6 +668,7 @@
     <string name="app_logo">Логотип приложения</string>
     <string name="switch_desc_lines">Макс. строк описания передачи в инфо-попапе</string>
     <string-array name="buffer_entries">
+        <item>@string/no_buffering</item>
         <item>Маленький</item>
         <item>Средний</item>
         <item>Большой</item>
