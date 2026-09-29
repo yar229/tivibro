@@ -614,8 +614,11 @@ captureFontScale(switchAudioCodec) { prefs.bottomPanelFont }
     }
 
     private fun showSwitchPanel() {
-        if (switchPanel.visibility == View.VISIBLE) return
         val ch = channel ?: return
+        // The panel stays on screen while the user keeps switching channels, so its content
+        // has to be refilled for the new channel even when it is already visible. Only the
+        // badges used to be refreshed, by the ticker, which left the rest of the panel stale.
+        val alreadyVisible = switchPanel.visibility == View.VISIBLE
         val prog = program
         val now = System.currentTimeMillis()
 
@@ -656,8 +659,12 @@ captureFontScale(switchAudioCodec) { prefs.bottomPanelFont }
 
         if (prefs.showInfoOnSwitch) {
             switchPanel.visible(true)
-            switchTimeout = System.currentTimeMillis() + (prefs.displayChangeTimeout * 1000L)
-            if (!sideChannelsVisible) switchPanel.requestFocus()
+            if (alreadyVisible) {
+                resetSwitchTimeout()
+            } else {
+                switchTimeout = System.currentTimeMillis() + (prefs.displayChangeTimeout * 1000L)
+                if (!sideChannelsVisible) switchPanel.requestFocus()
+            }
             if (prefs.showDescriptionOnSwitch) updateInfoPanel()
         }
         if (prefs.showBlackScreen) {
@@ -964,6 +971,7 @@ captureFontScale(switchAudioCodec) { prefs.bottomPanelFont }
         executor.execute {
             val next = ch.id.let { repo.programsFor(it, now, now + 12 * 3600_000L) }.firstOrNull()
             main.post {
+                if (channel?.id != ch.id) return@post
                 infoNextProgram.text = if (next != null) {
                     getString(R.string.next_program) + ": " + next.title + " (" + Fmt.time(next.start) + ")"
                 } else {
