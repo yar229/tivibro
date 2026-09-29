@@ -68,6 +68,8 @@ class PlayerActivity : AppCompatActivity() {
     private lateinit var switchQuality: TextView
     private lateinit var switchFps: TextView
     private lateinit var switchAudio: TextView
+private lateinit var switchVideoCodec: TextView
+private lateinit var switchAudioCodec: TextView
     private lateinit var switchDescription: TextView
     private lateinit var switchNextProgram: TextView
     private lateinit var sideChannelsList: RecyclerView
@@ -242,6 +244,8 @@ private var panelTimeout = 0L
         switchQuality = findViewById(R.id.switch_quality)
         switchFps = findViewById(R.id.switch_fps)
         switchAudio = findViewById(R.id.switch_audio)
+switchVideoCodec = findViewById(R.id.switch_video_codec)
+switchAudioCodec = findViewById(R.id.switch_audio_codec)
         switchDescription = findViewById(R.id.switch_description)
         switchNextProgram = findViewById(R.id.switch_next_program)
 
@@ -291,6 +295,8 @@ sideChannelsList = findViewById(R.id.side_channels_list)
         captureFontScale(switchQuality) { prefs.bottomPanelFont }
         captureFontScale(switchFps) { prefs.bottomPanelFont }
         captureFontScale(switchAudio) { prefs.bottomPanelFont }
+captureFontScale(switchVideoCodec) { prefs.bottomPanelFont }
+captureFontScale(switchAudioCodec) { prefs.bottomPanelFont }
         captureFontScale(switchDescription) { prefs.bottomPanelFont }
         captureFontScale(switchNextProgram) { prefs.bottomPanelFont }
 
@@ -683,7 +689,9 @@ sideChannelsList = findViewById(R.id.side_channels_list)
         }
         engine.videoFps()?.let { meta.fps = it }
         engine.audioChannels()?.let { meta.audio = it }
-        Log.d("TvibroBadges", "ch=${ch.name} size=$size cached=${meta.width}x${meta.height} fps=${meta.fps} audio=${meta.audio} vH=$videoHeight eng=${engine.javaClass.simpleName}")
+        engine.videoCodecLabel()?.let { meta.videoCodec = it }
+        engine.audioCodecLabel()?.let { meta.audioCodec = it }
+        Log.d("TvibroBadges", "ch=${ch.name} size=$size cached=${meta.width}x${meta.height} fps=${meta.fps} audio=${meta.audio} vcodec=${meta.videoCodec} acodec=${meta.audioCodec} vH=$videoHeight eng=${engine.javaClass.simpleName}")
     }
 
     private fun updateStreamBadges() {
@@ -710,6 +718,12 @@ sideChannelsList = findViewById(R.id.side_channels_list)
 
         switchAudio.text = meta.audio?.let { audioLabel(it) }.orEmpty()
         switchAudio.visible(meta.audio != null)
+
+        switchVideoCodec.text = meta.videoCodec.orEmpty()
+        switchVideoCodec.visible(meta.videoCodec != null)
+
+        switchAudioCodec.text = meta.audioCodec.orEmpty()
+        switchAudioCodec.visible(meta.audioCodec != null)
     }
 
     private fun audioLabel(channels: Int): String = when (channels) {
@@ -1508,8 +1522,10 @@ sideChannelsList = findViewById(R.id.side_channels_list)
 class StreamMeta {
     var width: Int = 0
     var height: Int = 0
-    var fps: Float? = null
-    var audio: Int? = null
+        var fps: Float? = null
+        var audio: Int? = null
+        var videoCodec: String? = null
+        var audioCodec: String? = null
 
     val resolution: String? get() =
         if (width > 0 && height > 0) "${width}x${height}" else null

@@ -16,3 +16,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "TiViBro"
 include(":app")
+include(":media3-exoplayer-ffmpeg")

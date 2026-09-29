@@ -14,7 +14,9 @@ import androidx.annotation.OptIn
 import android.util.Log
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
+import androidx.media3.common.Format
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MimeTypes
 import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.common.VideoSize
@@ -25,6 +27,7 @@ import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.LoadControl
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.exoplayer.hls.HlsMediaSource
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
@@ -54,6 +57,8 @@ interface PlaybackEngine {
     fun videoSize(): Pair<Int, Int>?
     fun videoFps(): Float?
     fun audioChannels(): Int?
+    fun videoCodecLabel(): String? = null
+    fun audioCodecLabel(): String? = null
     fun release()
 
     var onReady: (() -> Unit)?
@@ -74,7 +79,13 @@ class ExoEngine(
 
     private val appContext = context.applicationContext
     private val trackSelector = DefaultTrackSelector(appContext)
-    private val renderersFactory = DefaultRenderersFactory(appContext).setEnableDecoderFallback(true)
+    // PREFER puts the FFmpeg extension ahead of MediaCodec: Stalker portals hand out MPEG audio
+    // layer 2 streams that no platform decoder on these boxes can handle, and FFmpeg is the only
+    // way they produce sound instead of a hard "track not supported" failure.
+    private val renderersFactory =
+        DefaultRenderersFactory(appContext)
+            .setEnableDecoderFallback(true)
+            .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
     private val loadControl = buildLoadControl(bufferMs)
     private val player: ExoPlayer = ExoPlayer.Builder(appContext)
         .setRenderersFactory(renderersFactory)
@@ -84,7 +95,27 @@ class ExoEngine(
         .setHandleAudioBecomingNoisy(true)
         .build()
 
+    private var lastUrl = ""
+    private var lastUserAgent = ""
+    private var lastStartMs = 0L
+    private var useHls = true
+    private var fallbackUsed = false
+    @Volatile private var spsInfo: H264Sps.Info? = null
+    @Volatile private var spsKey: String? = null
+    private val mainHandler = Handler(Looper.getMainLooper())
+
+    init {
+        runCatching {
+            val list = android.media.MediaCodecList(android.media.MediaCodecList.REGULAR_CODECS)
+            val hits = list.codecInfos.filter { it.supportedTypes.any { t -> t.contains("mpeg", true) } }
+                .map { ci -> "${ci.name} [${ci.supportedTypes.joinToString(",")}]" }
+            android.util.Log.d("TvibroCodecs", "mpeg-декодеры: ${hits.size}\n" + hits.joinToString("\n"))
+        }
+    }
+
     companion object {
+        private const val WATCHDOG_MS = 8_000L
+
         /**
          * Media3 throws [IllegalArgumentException] unless minBuffer >= bufferForPlayback
          * and maxBuffer >= minBuffer, so every value coming from settings is sanitized.
@@ -113,7 +144,8 @@ class ExoEngine(
     var passthroughEnabled = passthrough
     var hardwareDecoderEnabled = true
 
-    init {        parent.addView(
+    init {
+        parent.addView(
             playerView,
             ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
         )
@@ -124,6 +156,7 @@ class ExoEngine(
                     androidx.media3.common.Player.STATE_READY -> {
                         onBuffering?.invoke(false)
                         onReady?.invoke()
+                        maybeScheduleSps()
                     }
                     androidx.media3.common.Player.STATE_BUFFERING -> onBuffering?.invoke(true)
                     androidx.media3.common.Player.STATE_ENDED -> {
@@ -135,12 +168,19 @@ class ExoEngine(
             }
 
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                // A portal URL carries no file extension, so the container has to be guessed.
+                // Stalker proxies answer with HLS far more often than with a plain TS body,
+                // and the two are tried in turn, one connection at a time.
+                Log.w("ExoEngine", "ошибка ${error.errorCodeName}, пробуем другой контейнер")
+                if (tryOtherContainer()) return
                 onError?.invoke(error.errorCodeName)
             }
 
             override fun onVideoSizeChanged(videoSize: VideoSize) {
                 if (videoSize.width > 0 && videoSize.height > 0) {
+                    cancelWatchdog()
                     onVideoSize?.invoke(videoSize.width, videoSize.height)
+                    maybeScheduleSps()
                 }
             }
 
@@ -175,6 +215,15 @@ class ExoEngine(
     }
 
     override fun prepare(url: String, userAgent: String, startPositionMs: Long) {
+        lastUrl = url
+        lastUserAgent = userAgent
+        lastStartMs = startPositionMs
+        fallbackUsed = false
+        useHls = true
+        startPlayback(url, userAgent, startPositionMs)
+    }
+
+    private fun startPlayback(url: String, userAgent: String, startPositionMs: Long) {
         val mediaItem = MediaItem.Builder().setUri(url).build()
         val httpFactory = DefaultHttpDataSource.Factory()
             .setUserAgent(userAgent.ifBlank { "TiViBro" })
@@ -182,12 +231,96 @@ class ExoEngine(
             .setConnectTimeoutMs(20_000)
             .setReadTimeoutMs(30_000)
         val dataSourceFactory = DefaultDataSource.Factory(appContext, httpFactory)
-        val mediaSourceFactory = DefaultMediaSourceFactory(dataSourceFactory)
-        player.setMediaSource(mediaSourceFactory.createMediaSource(mediaItem))
+        val source = if (useHls) {
+            HlsMediaSource.Factory(dataSourceFactory).createMediaSource(mediaItem)
+        } else {
+            DefaultMediaSourceFactory(dataSourceFactory).createMediaSource(mediaItem)
+        }
+        player.setMediaSource(source)
         player.prepare()
         player.playWhenReady = true
         if (startPositionMs > 0) player.seekTo(startPositionMs)
+        armWatchdog()
     }
+
+    /**
+     * Stalker proxies that answer with an MPEG-TS body over an extensionless URL make Media3 wait
+     * on the sniffing extractor instead of failing, so the container switch cannot rely on
+     * [onPlayerError] alone: the watchdog flips it once no frame has shown up in time.
+     */
+    private fun tryOtherContainer(): Boolean {
+        if (fallbackUsed) return false
+        fallbackUsed = true
+        useHls = !useHls
+        Log.d("ExoEngine", "повтор: ${if (useHls) "HLS" else "progressive"}")
+        startPlayback(lastUrl, lastUserAgent, lastStartMs)
+        return true
+    }
+
+    private fun armWatchdog() {
+        mainHandler.removeCallbacks(watchdogRun)
+        mainHandler.postDelayed(watchdogRun, WATCHDOG_MS)
+    }
+
+    private fun cancelWatchdog() {
+        mainHandler.removeCallbacks(watchdogRun)
+    }
+
+    /**
+     * Media3 leaves [androidx.media3.common.Format.frameRate] unset for TS, so the real frame rate
+     * has to come out of the SPS. Decoding it here is off the critical path on purpose: the track
+     * change only hands a few dozen bytes to a background thread and the badge reads the result
+     * through a volatile field, so neither opening a channel nor playback is held up.
+     */
+    private fun maybeScheduleSps() {
+        val format = runCatching { player.videoFormat }.getOrNull() ?: return
+        scheduleSpsParse(format)
+    }
+
+    private fun scheduleSpsParse(format: Format) {
+        if (format.sampleMimeType != MimeTypes.VIDEO_H264) return
+        val csd = format.copyCsd() ?: return
+        val key = "${format.width}x${format.height}:${csd.size}"
+        if (key == spsKey) return
+        spsKey = key
+        spsInfo = null
+        spsExecutor.execute {
+            val parsed = H264Sps.parse(csd)
+            if (parsed == null) {
+                spsKey = null
+                return@execute
+            }
+            Log.d(
+                "ExoEngine",
+                "SPS: ${parsed.width}x${parsed.height} fps=${parsed.frameRate} " +
+                    "profile=${parsed.profileIdc} level=${parsed.levelIdc}"
+            )
+            spsInfo = parsed
+        }
+    }
+
+    private fun Format.copyCsd(): ByteArray? =
+        initializationData?.getOrNull(0)?.takeIf { it.isNotEmpty() }
+
+    private val watchdogRun = Runnable {
+        val size = videoSize()
+        if (size == null) {
+            Log.w("ExoEngine", "нет картинки за ${WATCHDOG_MS}мс, меняем контейнер")
+            tryOtherContainer()
+        }
+    }
+
+    override fun videoCodecLabel(): String? =
+        runCatching { player.videoFormat?.sampleMimeType?.let { codecLabel(it) } }.getOrNull()
+
+    override fun audioCodecLabel(): String? = runCatching {
+        player.currentTracks.groups
+            .firstOrNull { it.type == C.TRACK_TYPE_AUDIO && it.isSelected }
+            ?.mediaTrackGroup
+            ?.getFormat(0)
+            ?.sampleMimeType
+            ?.let { codecLabel(it) }
+    }.getOrNull()
 
     override fun play() {
         player.play()
@@ -241,9 +374,10 @@ class ExoEngine(
         if (width <= 0 || height <= 0) null else width to height
     }.getOrNull()
 
-    override fun videoFps(): Float? = runCatching {
-        player.videoFormat?.frameRate?.takeIf { it > 0 }
-    }.getOrNull()
+    override fun videoFps(): Float? {
+        spsInfo?.frameRate?.let { if (it > 0) return it }
+        return runCatching { player.videoFormat?.frameRate?.takeIf { it > 0 } }.getOrNull()
+    }
 
     override fun audioChannels(): Int? = runCatching {
         player.audioFormat?.channelCount?.takeIf { it > 0 }
@@ -873,6 +1007,11 @@ class VlcEngine(context: Context, private val parent: ViewGroup) : PlaybackEngin
         snapshot?.firstNotNullOfOrNull { it.takeIf { t -> t.videoWidth > 0 && t.videoHeight > 0 } }
             ?.let { it.videoWidth to it.videoHeight }
 
+    override fun videoCodecLabel(): String? =
+        bestSnapshot?.firstNotNullOfOrNull { if (it.type == 1) fourccLabel(it.codec) else null }
+
+    override fun audioCodecLabel(): String? =
+        bestSnapshot?.firstNotNullOfOrNull { if (it.type == 2) fourccLabel(it.codec) else null }
     private fun snapshotFps(snapshot: List<ParsedTrack>?): Float? =
         snapshot?.firstNotNullOfOrNull { it.takeIf { t -> t.fpsDen > 0 } }
             ?.let { it.fpsNum.toFloat() / it.fpsDen }
@@ -1019,5 +1158,59 @@ class VlcEngine(context: Context, private val parent: ViewGroup) : PlaybackEngin
     companion object {
         private const val ASPECT_MODES = 3
         private const val MAX_PARSE_ATTEMPTS = 6
+    }
+}
+
+/** Single background thread for codec introspection, kept off the playback and main threads. */
+private val spsExecutor: java.util.concurrent.ExecutorService =
+    Executors.newSingleThreadExecutor { runnable ->
+        Thread(runnable, "tvibro-sps").apply { isDaemon = true; priority = Thread.MIN_PRIORITY }
+    }
+
+/** Short, badge-sized names for the codecs an IPTV stream actually uses. */
+private fun codecLabel(mime: String?): String? {
+    val m = mime?.lowercase() ?: return null
+    return when {
+        m == "video/avc" || m == "video/h264" -> "H264"
+        m == "video/hevc" || m == "video/h265" -> "HEVC"
+        m == "video/mp4v-es" -> "MPEG4"
+        m == "video/mpeg2" -> "MPEG2"
+        m == "video/x-vnd.on2.vp8" -> "VP8"
+        m == "video/x-vnd.on2.vp9" -> "VP9"
+        m == "video/av01" -> "AV1"
+        m == "audio/mpeg-l2" || m == "audio/mp2" || m == "audio/mp4a-6b" -> "MP2"
+        m == "audio/mpeg" || m == "audio/mpeg-l3" || m == "audio/mp3" -> "MP3"
+        m == "audio/mp4a-latm" -> "AAC"
+        m == "audio/ac3" -> "AC3"
+        m == "audio/eac3" || m == "audio/eac3-joc" -> "EAC3"
+        m == "audio/vnd.dts" || m == "audio/vnd.dts.hd" -> "DTS"
+        m == "audio/vorbis" -> "VORBIS"
+        m == "audio/opus" -> "OPUS"
+        m == "audio/flac" -> "FLAC"
+        m == "audio/3gpp" -> "AMR"
+        m == "audio/amr-wb" -> "AMR-WB"
+        m == "audio/raw" -> "PCM"
+        m.startsWith("audio/") -> m.removePrefix("audio/").substringBefore(';').uppercase().take(6)
+        m.startsWith("video/") -> m.removePrefix("video/").substringBefore(';').uppercase().take(6)
+        else -> null
+    }
+}
+
+/** libvlc hands back either a four character code ("H264") or a longer codec name. */
+private fun fourccLabel(codec: String?): String? {
+    val raw = codec?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+    return when (raw.lowercase()) {
+        "h264", "avc", "avc1" -> "H264"
+        "hevc", "h265" -> "HEVC"
+        "mpgv", "mpeg2video", "mp2v" -> "MPEG2"
+        "mp4v" -> "MPEG4"
+        "vp8" -> "VP8"
+        "vp9" -> "VP9"
+        "mpga", "mp3" -> "MP3"
+        "mp2", "mp2a" -> "MP2"
+        "aac" -> "AAC"
+        "ac3" -> "AC3"
+        "eac3" -> "EAC3"
+        else -> raw.filter { it.isLetterOrDigit() }.uppercase().take(6)
     }
 }
