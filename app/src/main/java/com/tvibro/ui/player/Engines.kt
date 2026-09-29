@@ -99,7 +99,7 @@ class ExoEngine(
     private var lastUserAgent = ""
     private var lastStartMs = 0L
     private var useHls = true
-    private var fallbackUsed = false
+    private var attempts = 0
     @Volatile private var spsInfo: H264Sps.Info? = null
     @Volatile private var spsKey: String? = null
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -115,6 +115,7 @@ class ExoEngine(
 
     companion object {
         private const val WATCHDOG_MS = 8_000L
+        private const val MAX_START_ATTEMPTS = 3
 
         /**
          * Media3 throws [IllegalArgumentException] unless minBuffer >= bufferForPlayback
@@ -172,7 +173,7 @@ class ExoEngine(
                 // Stalker proxies answer with HLS far more often than with a plain TS body,
                 // and the two are tried in turn, one connection at a time.
                 Log.w("ExoEngine", "ошибка ${error.errorCodeName}, пробуем другой контейнер")
-                if (tryOtherContainer()) return
+                if (tryNextAttempt()) return
                 onError?.invoke(error.errorCodeName)
             }
 
@@ -218,8 +219,10 @@ class ExoEngine(
         lastUrl = url
         lastUserAgent = userAgent
         lastStartMs = startPositionMs
-        fallbackUsed = false
+        attempts = 0
         useHls = true
+        spsInfo = null
+        spsKey = null
         startPlayback(url, userAgent, startPositionMs)
     }
 
@@ -244,15 +247,17 @@ class ExoEngine(
     }
 
     /**
-     * Stalker proxies that answer with an MPEG-TS body over an extensionless URL make Media3 wait
-     * on the sniffing extractor instead of failing, so the container switch cannot rely on
-     * [onPlayerError] alone: the watchdog flips it once no frame has shown up in time.
+     * A Stalker proxy answers with HLS or a plain TS body and never says which, and either attempt
+     * can also stall without a single error event. Each channel therefore gets a bounded run of
+     * single-connection tries: the container flips every time, a stall is caught by the watchdog,
+     * and once the run is over the failure is reported instead of a dead black screen. A fresh
+     * [prepare] on the same URL demonstrably recovers a stalled proxy, hence the re-tries.
      */
-    private fun tryOtherContainer(): Boolean {
-        if (fallbackUsed) return false
-        fallbackUsed = true
+    private fun tryNextAttempt(): Boolean {
+        if (attempts >= MAX_START_ATTEMPTS) return false
+        attempts++
         useHls = !useHls
-        Log.d("ExoEngine", "повтор: ${if (useHls) "HLS" else "progressive"}")
+        Log.d("ExoEngine", "попытка #$attempts: ${if (useHls) "HLS" else "progressive"}")
         startPlayback(lastUrl, lastUserAgent, lastStartMs)
         return true
     }
@@ -264,6 +269,18 @@ class ExoEngine(
 
     private fun cancelWatchdog() {
         mainHandler.removeCallbacks(watchdogRun)
+    }
+
+    private val watchdogRun = Runnable {
+        // Audio-only streams (radio) are legitimately READY without any video size.
+        val progressing = runCatching {
+            player.playbackState == androidx.media3.common.Player.STATE_READY || videoSize() != null
+        }.getOrDefault(false)
+        if (progressing) return@Runnable
+        Log.w("ExoEngine", "нет данных за ${WATCHDOG_MS}мс, попытка #$attempts")
+        if (!tryNextAttempt()) {
+            onError?.invoke("Stream stalled")
+        }
     }
 
     /**
@@ -280,7 +297,8 @@ class ExoEngine(
     private fun scheduleSpsParse(format: Format) {
         if (format.sampleMimeType != MimeTypes.VIDEO_H264) return
         val csd = format.copyCsd() ?: return
-        val key = "${format.width}x${format.height}:${csd.size}"
+        // Content hash, not the size: two channels of the same resolution must not share a result.
+        val key = "${format.width}x${format.height}:${csd.contentHashCode()}"
         if (key == spsKey) return
         spsKey = key
         spsInfo = null
@@ -301,14 +319,6 @@ class ExoEngine(
 
     private fun Format.copyCsd(): ByteArray? =
         initializationData?.getOrNull(0)?.takeIf { it.isNotEmpty() }
-
-    private val watchdogRun = Runnable {
-        val size = videoSize()
-        if (size == null) {
-            Log.w("ExoEngine", "нет картинки за ${WATCHDOG_MS}мс, меняем контейнер")
-            tryOtherContainer()
-        }
-    }
 
     override fun videoCodecLabel(): String? =
         runCatching { player.videoFormat?.sampleMimeType?.let { codecLabel(it) } }.getOrNull()
@@ -384,6 +394,7 @@ class ExoEngine(
     }.getOrNull()
 
     override fun release() {
+        cancelWatchdog()
         runCatching { playerView.player = null }
         runCatching { player.release() }
     }
