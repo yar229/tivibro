@@ -23,7 +23,6 @@ gradle.properties
 *.log
 
 # Android
-*.ap_
 *.dex
 
 # Local configuration
@@ -62,3 +61,4 @@ proguard/
 
 # Release
 release/
+/AGENTS.md

@@ -104,15 +104,6 @@ class ExoEngine(
     @Volatile private var spsKey: String? = null
     private val mainHandler = Handler(Looper.getMainLooper())
 
-    init {
-        runCatching {
-            val list = android.media.MediaCodecList(android.media.MediaCodecList.REGULAR_CODECS)
-            val hits = list.codecInfos.filter { it.supportedTypes.any { t -> t.contains("mpeg", true) } }
-                .map { ci -> "${ci.name} [${ci.supportedTypes.joinToString(",")}]" }
-            android.util.Log.d("TvibroCodecs", "mpeg-декодеры: ${hits.size}\n" + hits.joinToString("\n"))
-        }
-    }
-
     companion object {
         private const val WATCHDOG_MS = 8_000L
         private const val MAX_START_ATTEMPTS = 3
@@ -151,6 +142,15 @@ class ExoEngine(
             ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
         )
         playerView.player = player
+        player.addAnalyticsListener(object : androidx.media3.exoplayer.analytics.AnalyticsListener {
+            override fun onDroppedVideoFrames(
+                eventTime: androidx.media3.exoplayer.analytics.AnalyticsListener.EventTime,
+                droppedFrames: Int,
+                elapsedMs: Long,
+            ) {
+                Log.w("ExoEngine", "потеряно кадров: $droppedFrames за ${elapsedMs}мс")
+            }
+        })
         player.addListener(object : androidx.media3.common.Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
                 when (playbackState) {
@@ -311,14 +311,15 @@ class ExoEngine(
             Log.d(
                 "ExoEngine",
                 "SPS: ${parsed.width}x${parsed.height} fps=${parsed.frameRate} " +
-                    "profile=${parsed.profileIdc} level=${parsed.levelIdc}"
+                    "profile=${parsed.profileIdc} level=${parsed.levelIdc} " +
+                    "interlaced=${parsed.interlaced}"
             )
             spsInfo = parsed
         }
     }
 
     private fun Format.copyCsd(): ByteArray? =
-        initializationData?.getOrNull(0)?.takeIf { it.isNotEmpty() }
+        initializationData[0].takeIf { it.isNotEmpty() }
 
     override fun videoCodecLabel(): String? =
         runCatching { player.videoFormat?.sampleMimeType?.let { codecLabel(it) } }.getOrNull()

@@ -17,6 +17,7 @@ internal object H264Sps {
         val frameRate: Float?,
         val profileIdc: Int,
         val levelIdc: Int,
+        val interlaced: Boolean = false,
     )
 
     private val HIGH_PROFILES = intArrayOf(100, 110, 122, 244, 44, 83, 86, 118, 128, 138, 139, 134, 135)
@@ -122,7 +123,7 @@ internal object H264Sps {
         val height = (2 - frameMbsOnly) * heightInMapUnits * 16 - cropUnitY * (cropTop + cropBottom)
         if (width <= 0 || height <= 0) return null
 
-        return Info(width, height, frameRate, profileIdc, levelIdc)
+        return Info(width, height, frameRate, profileIdc, levelIdc, interlaced = frameMbsOnly == 0)
     }
 
     /** VUI timing block: a frame lasts 2 * numUnitsInTick of timeScale, per the H.264 spec. */
