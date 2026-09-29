@@ -145,6 +145,7 @@ dependencies {
     implementation("androidx.window:window:1.3.0")
     implementation("androidx.work:work-runtime-ktx:2.9.1")
     implementation("androidx.media3:media3-exoplayer:1.3.1")
+    implementation(project(":media3-exoplayer-ffmpeg"))
     implementation("androidx.media3:media3-exoplayer-hls:1.3.1")
     implementation("androidx.media3:media3-exoplayer-dash:1.3.1")
     implementation("androidx.media3:media3-exoplayer-rtsp:1.3.1")

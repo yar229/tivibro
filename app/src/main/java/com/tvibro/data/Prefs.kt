@@ -151,7 +151,7 @@ class Prefs private constructor(context: Context) {
 
     /** "exo" or "vlc" */
     var engine: String
-        get() = sp.getString(KEY_ENGINE, "vlc") ?: "vlc"
+        get() = sp.getString(KEY_ENGINE, "exo") ?: "exo"
         set(v) = sp.edit { putString(KEY_ENGINE, v) }
 
     var bufferSizeMs: Int

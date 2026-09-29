@@ -286,6 +286,28 @@
                         android:visibility="gone"
                         tools:text="Stereo"
                         tools:visibility="visible" />
+
+                    <TextView
+                        android:id="@+id/switch_video_codec"
+                        style="@style/TvBro.Badge"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="@dimen/spacing_sm"
+                        android:background="@drawable/bg_badge_live"
+                        android:visibility="gone"
+                        tools:text="H264"
+                        tools:visibility="visible" />
+
+                    <TextView
+                        android:id="@+id/switch_audio_codec"
+                        style="@style/TvBro.Badge"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="@dimen/spacing_sm"
+                        android:background="@drawable/bg_badge_live"
+                        android:visibility="gone"
+                        tools:text="MP2"
+                        tools:visibility="visible" />
                 </LinearLayout>
 
             <TextView
