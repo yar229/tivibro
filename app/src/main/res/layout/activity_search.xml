@@ -57,7 +57,6 @@
             android:gravity="center"
             android:background="@drawable/bg_group_item"
             android:focusable="true"
-            android:focusableInTouchMode="true"
             android:paddingStart="@dimen/spacing_md"
             android:paddingEnd="@dimen/spacing_md"
             android:text="@string/include_vod" />

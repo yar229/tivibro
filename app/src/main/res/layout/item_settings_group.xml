@@ -7,7 +7,6 @@
     android:layout_height="wrap_content"
     android:background="@drawable/bg_row"
     android:focusable="true"
-    android:focusableInTouchMode="true"
     android:gravity="center_vertical"
     android:minHeight="64dp"
     android:orientation="horizontal"

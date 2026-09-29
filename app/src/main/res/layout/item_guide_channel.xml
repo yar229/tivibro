@@ -8,8 +8,7 @@
     android:paddingStart="@dimen/spacing_sm"
     android:paddingEnd="@dimen/spacing_sm"
     android:background="@drawable/bg_group_item"
-    android:focusable="true"
-    android:focusableInTouchMode="true">
+    android:focusable="true">
 
     <ImageView
         android:id="@+id/logo"

@@ -14,7 +14,9 @@ import android.util.Log
 import android.util.TypedValue
 import android.view.KeyEvent
 import android.view.LayoutInflater
+import android.view.MotionEvent
 import android.view.View
+import android.view.ViewConfiguration
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.FrameLayout
@@ -45,6 +47,7 @@ import com.tvibro.ui.settings.SettingsActivity
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.LinkedHashMap
+import kotlin.math.abs
 import java.util.Locale
 import java.util.concurrent.Executors
 
@@ -78,6 +81,13 @@ private lateinit var switchAudioCodec: TextView
 
     private val sideChannelsVisible: Boolean
         get() = sideContainer.visibility == View.VISIBLE
+    private var touchDownX = 0f
+    private var touchDownY = 0f
+    private var touchMoved = false
+    private var touchOnPanel = false
+    private var swipe = SWIPE_NONE
+    private val tapSlop by lazy { ViewConfiguration.get(this).scaledTouchSlop.toFloat() }
+    private val swipeDistance by lazy { resources.displayMetrics.density * SWIPE_DISTANCE_DP }
     private lateinit var sideProgramTitle: TextView
     private lateinit var sideProgramTime: TextView
     private lateinit var sideProgramDescription: TextView
@@ -213,6 +223,83 @@ private var panelTimeout = 0L
         keepPlayingBehind = false
     }
 
+    /**
+     * Touch controls, so the player is usable on a tablet where there is no D-pad:
+     * a tap on the left edge opens the channel list, a tap anywhere else opens the
+     * OSD with the bottom info panel, a vertical swipe changes the channel
+     * (up = next, down = previous). Gestures that start on a visible panel are ignored,
+     * so buttons, the channel list and the seek bar keep working, and the remote flow
+     * is untouched.
+     */
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        when (ev.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                touchDownX = ev.x
+                touchDownY = ev.y
+                touchMoved = false
+                touchOnPanel = touchInsidePanel(ev.x, ev.y)
+                swipe = SWIPE_NONE
+            }
+            MotionEvent.ACTION_MOVE -> {
+                val dx = ev.x - touchDownX
+                val dy = ev.y - touchDownY
+                if (abs(dx) > tapSlop || abs(dy) > tapSlop) touchMoved = true
+                if (!touchOnPanel && swipe == SWIPE_NONE && abs(dy) > swipeDistance &&
+                    abs(dy) > abs(dx) * SWIPE_VERTICAL_BIAS
+                ) {
+                    swipe = if (dy < 0f) SWIPE_UP else SWIPE_DOWN
+                }
+            }
+            MotionEvent.ACTION_UP -> {
+                if (!touchOnPanel) {
+                    when (swipe) {
+                        SWIPE_UP -> if (sideChannelsVisible) hideSideChannels() else nextChannel()
+                        SWIPE_DOWN -> if (sideChannelsVisible) hideSideChannels() else previousChannel()
+                        else -> if (!touchMoved && !touchInsidePanel(ev.x, ev.y)) handleScreenTap(ev.x)
+                    }
+                }
+            }
+            MotionEvent.ACTION_CANCEL -> swipe = SWIPE_NONE
+        }
+        return super.dispatchTouchEvent(ev)
+    }
+
+    private fun handleScreenTap(x: Float) {
+        if (!::root.isInitialized) return
+        if (sideChannelsVisible) {
+            hideSideChannels()
+            return
+        }
+        if (root.width > 0 && x < root.width * SIDE_TAP_ZONE) {
+            showSideChannels()
+            return
+        }
+        if (osdPanel.visibility == View.VISIBLE || switchPanel.visibility == View.VISIBLE) {
+            hidePanels()
+            return
+        }
+        showPanels()
+        showSwitchPanel(armBuffering = false)
+    }
+
+    /** True when the point sits on one of the panels that are currently on screen. */
+    private fun touchInsidePanel(x: Float, y: Float): Boolean {
+        if (!::osdPanel.isInitialized) return false
+        val candidates = buildList {
+            if (::sideContainer.isInitialized) add(sideContainer)
+            if (::osdHeader.isInitialized) add(osdHeader)
+            if (::osdPanel.isInitialized) add(osdPanel)
+            if (::switchPanel.isInitialized) add(switchPanel)
+            if (::infoPanel.isInitialized) add(infoPanel)
+        }
+        return candidates.any { view ->
+            if (view.visibility != View.VISIBLE || view.width == 0) return@any false
+            val loc = IntArray(2)
+            view.getLocationOnScreen(loc)
+            x >= loc[0] && x < loc[0] + view.width && y >= loc[1] && y < loc[1] + view.height
+        }
+    }
+
     override fun onResume() {
         super.onResume()
         keepPlayingBehind = false
@@ -251,6 +338,10 @@ switchAudioCodec = findViewById(R.id.switch_audio_codec)
 
         sideChannelAdapter = SideChannelAdapter(
             onClick = { ch -> selectSideChannel(ch.id) },
+            onSelect = { ch ->
+                sideChannelAdapter.setSelected(ch.id)
+                updateSideProgramDetails(ch.id)
+            },
             onFocus = { ch -> updateSideProgramDetails(ch.id) },
             fontScale = prefs.channelPanelFont,
         )
@@ -613,7 +704,12 @@ captureFontScale(switchAudioCodec) { prefs.bottomPanelFont }
         }
     }
 
-    private fun showSwitchPanel() {
+    /**
+     * @param armBuffering true only when a real channel switch is under way. Revealing the
+     *   panel on its own (remote "info" action, touch tap) must not raise the buffering
+     *   indicator, because nothing is loading at that moment.
+     */
+    private fun showSwitchPanel(armBuffering: Boolean = true) {
         val ch = channel ?: return
         // The panel stays on screen while the user keeps switching channels, so its content
         // has to be refilled for the new channel even when it is already visible. Only the
@@ -667,7 +763,7 @@ captureFontScale(switchAudioCodec) { prefs.bottomPanelFont }
             }
             if (prefs.showDescriptionOnSwitch) updateInfoPanel()
         }
-        if (prefs.showBlackScreen) {
+        if (armBuffering && prefs.showBlackScreen) {
             showMessage(getString(R.string.stream_buffering))
             armBufferingTimeout(ch.id)
         }
@@ -1066,7 +1162,7 @@ captureFontScale(switchAudioCodec) { prefs.bottomPanelFont }
         when (action) {
             "show_info" -> {
                 showPanels()
-                showSwitchPanel()
+                showSwitchPanel(armBuffering = false)
             }
             "show_channels" -> showSideChannels()
             "volume_up" -> changeVolume(0.1f)
@@ -1517,6 +1613,19 @@ captureFontScale(switchAudioCodec) { prefs.bottomPanelFont }
 
         /** Upper bound for the buffering spinner and label, so neither can get stuck. */
         const val BUFFERING_TIMEOUT_MS = 15_000L
+
+        /** Share of the screen width that opens the channel list when tapped. */
+        const val SIDE_TAP_ZONE = 0.3f
+
+        /** Vertical drag needed to change the channel, in dp. */
+        const val SWIPE_DISTANCE_DP = 80f
+
+        /** Vertical drag must beat the horizontal one by this factor to count as a swipe. */
+        const val SWIPE_VERTICAL_BIAS = 1.5f
+
+        const val SWIPE_NONE = 0
+        const val SWIPE_UP = 1
+        const val SWIPE_DOWN = 2
 
         /** How often the channel list EPG progress is reloaded while the list is open. */
         const val SIDE_PROGRAMS_REFRESH_MS = 30_000L

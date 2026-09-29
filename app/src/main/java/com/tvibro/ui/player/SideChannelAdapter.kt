@@ -15,6 +15,7 @@ import com.tvibro.data.model.Channel
 
 class SideChannelAdapter(
     private val onClick: (Channel) -> Unit,
+    private val onSelect: ((Channel) -> Unit)? = null,
     private val onFocus: ((Channel) -> Unit)? = null,
     private var fontScale: Float = 1f,
 ) : RecyclerView.Adapter<SideChannelAdapter.Holder>() {
@@ -22,6 +23,9 @@ class SideChannelAdapter(
     private var items: List<Channel> = emptyList()
     private var programs: Map<Long, ProgramInfo> = emptyMap()
     private var selectedId: Long = -1L
+    private var lastTapTime = 0L
+    private var lastTapChannelId = -1L
+    private val doubleTapTimeout = 300L
     private val nameBaseSp = R.dimen.text_sm
     private val programBaseSp = R.dimen.text_xs
     private val numberBaseSp = R.dimen.text_xxs
@@ -86,7 +90,18 @@ class SideChannelAdapter(
             holder.logo.setImageResource(R.drawable.ic_logo_channel)
         }
         holder.itemView.isSelected = channel.id == selectedId
-        holder.itemView.setOnClickListener { onClick(channel) }
+        holder.itemView.setOnClickListener {
+            val now = System.currentTimeMillis()
+            if (channel.id == lastTapChannelId && now - lastTapTime < doubleTapTimeout) {
+                onClick(channel)
+                lastTapTime = 0L
+                lastTapChannelId = -1L
+            } else {
+                lastTapTime = now
+                lastTapChannelId = channel.id
+                if (channel.id == selectedId) onClick(channel) else onSelect?.invoke(channel)
+            }
+        }
         holder.itemView.setOnFocusChangeListener { _, hasFocus ->
             if (hasFocus) onFocus?.invoke(channel)
         }

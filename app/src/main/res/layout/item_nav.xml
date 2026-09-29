@@ -9,7 +9,6 @@
     android:background="@drawable/bg_nav_item"
     android:clickable="true"
     android:focusable="true"
-    android:focusableInTouchMode="true"
     android:paddingStart="@dimen/spacing_md"
     android:paddingEnd="@dimen/spacing_md">
 

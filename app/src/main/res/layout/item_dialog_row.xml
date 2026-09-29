@@ -9,8 +9,7 @@
     android:paddingStart="@dimen/spacing_md"
     android:paddingEnd="@dimen/spacing_md"
     android:background="@drawable/bg_dialog_item"
-    android:focusable="true"
-    android:focusableInTouchMode="true">
+    android:focusable="true">
 
     <TextView
         android:id="@+id/item_title"

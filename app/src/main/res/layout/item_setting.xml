@@ -9,8 +9,7 @@
     android:paddingStart="@dimen/spacing_lg"
     android:paddingEnd="@dimen/spacing_lg"
     android:background="@drawable/bg_row"
-    android:focusable="true"
-    android:focusableInTouchMode="true">
+    android:focusable="true">
 
     <LinearLayout
         android:layout_width="0dp"
@@ -46,6 +45,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginStart="@dimen/spacing_md"
+        android:clickable="false"
         android:focusable="false" />
 
     <ImageView
