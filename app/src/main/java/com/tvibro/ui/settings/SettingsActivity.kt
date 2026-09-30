@@ -18,6 +18,7 @@ import com.tvibro.data.model.EpgSource
 import com.tvibro.ui.common.Dialogs
 import com.tvibro.ui.common.PinGate
 import com.tvibro.ui.playlist.PlaylistWizardActivity
+import com.tvibro.ui.playlist.PlaylistsActivity
 import com.tvibro.work.EpgUpdateScheduler
 import java.io.File
 
@@ -422,6 +423,9 @@ class SettingsActivity : AppCompatActivity() {
             ))
             add(SettingItem.Action(getString(R.string.add_playlist)) {
                 startActivity(android.content.Intent(this@SettingsActivity, PlaylistWizardActivity::class.java))
+            })
+            add(SettingItem.Action(getString(R.string.edit_playlists)) {
+                startActivity(android.content.Intent(this@SettingsActivity, PlaylistsActivity::class.java))
             })
             add(SettingItem.Action(getString(R.string.channel_names_editor)) { editChannelNames() })
             add(SettingItem.Action(getString(R.string.clear_logos_cache)) { clearLogos() })

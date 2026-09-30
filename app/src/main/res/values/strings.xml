@@ -72,7 +72,13 @@
     <string name="press_ok_to_turn_on">Press OK to turn on channel</string>
     <string name="press_ok_to_show_menu">Press OK to show menu</string>
     <string name="long_ok_to_open_menu">Long OK: open menu</string>
+    <string name="edit_playlists">Edit playlists</string>
+    <string name="confirm_delete_playlist">Delete playlist "%1$s"?</string>
+    <string name="edit_playlist">Edit playlist</string>
+    <string name="playlists_count">Playlists: %1$d</string>
+    <string name="playlist_actions">Actions</string>
     <string name="add_playlist">Add playlist</string>
+
     <string name="add_to_favorites">Add to Favorites</string>
     <string name="added_to_favorites">Added to Favorites</string>
     <string name="remove_from_favorites">Remove from Favorites</string>
@@ -848,3 +854,4 @@
         <item quantity="other">%d items</item>
     </plurals>
 </resources>
+

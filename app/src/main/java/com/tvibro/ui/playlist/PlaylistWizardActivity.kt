@@ -15,6 +15,7 @@ import com.tvibro.R
 import com.tvibro.TvBroApp
 import com.tvibro.base.toast
 import com.tvibro.base.visible
+import com.tvibro.data.db.TvBroRepository
 import com.tvibro.data.model.EpgSource
 import com.tvibro.data.model.Playlist
 import com.tvibro.data.model.PlaylistType
@@ -24,11 +25,18 @@ import com.tvibro.data.source.StalkerApi
 import com.tvibro.data.source.XtreamApi
 import com.tvibro.ui.common.Dialogs
 import java.util.Locale
+import java.util.concurrent.Executors
 
+/**
+ * The one form for a playlist. Adding starts at the type, editing goes straight to the fields with
+ * the stored values in them, so a playlist is described in one place only. Changing the type in edit
+ * mode keeps every value that still belongs to the new type.
+ */
 class PlaylistWizardActivity : AppCompatActivity() {
 
     private lateinit var titleView: TextView
     private lateinit var messageView: TextView
+    private lateinit var typeView: TextView
     private lateinit var fieldsView: LinearLayout
     private lateinit var statusView: TextView
     private lateinit var testButton: View
@@ -38,11 +46,27 @@ class PlaylistWizardActivity : AppCompatActivity() {
     private var onTypeStep = true
     private val inputs = HashMap<Int, EditText>()
 
+    /** Playlist being edited, null while a new one is being added. */
+    private var editing: Playlist? = null
+    private var draft = Draft()
+
+    private val executor = Executors.newSingleThreadExecutor { r -> Thread(r, "tvibro-wizard").apply { isDaemon = true } }
+
+    private class Draft(
+        var name: String = "",
+        var url: String = "",
+        var login: String = "",
+        var password: String = "",
+        var mac: String = "",
+        var epg: String = "",
+    )
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_wizard)
         titleView = findViewById(R.id.wizard_title)
         messageView = findViewById(R.id.wizard_message)
+        typeView = findViewById(R.id.wizard_type)
         fieldsView = findViewById(R.id.wizard_fields)
         statusView = findViewById(R.id.wizard_status)
         testButton = findViewById(R.id.button_test)
@@ -52,8 +76,54 @@ class PlaylistWizardActivity : AppCompatActivity() {
         okButton.setOnClickListener {
             if (onTypeStep) showTypeStep() else save()
         }
+        typeView.setOnClickListener { chooseType() }
         // a dialog must not be attached before the activity window has a token
-        window.decorView.post { if (!isFinishing) showTypeStep() }
+        window.decorView.post { if (!isFinishing) start() }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        executor.shutdownNow()
+    }
+
+    /**
+     * Editing reads the playlist and its EPG binding off the main thread: the screen has to open
+     * with the real values, and the query must not stand in the way of that.
+     */
+    private fun start() {
+        val playlistId = intent.getLongExtra(EXTRA_PLAYLIST_ID, 0L)
+        if (playlistId <= 0L) {
+            showTypeStep()
+            return
+        }
+        executor.execute {
+            val repo = TvBroApp.repo(this)
+            val playlist = runCatching { repo.playlist(playlistId) }.getOrNull()
+            val epg = runCatching {
+                // every binding, not only the enabled ones: a disabled source is still the one the
+                // field belongs to, and it is updated instead of duplicated.
+                val bound = repo.epgSources().firstOrNull { it.playlistId == playlistId }?.url.orEmpty()
+                if (bound.isNotBlank()) bound else playlist?.epgUrl.orEmpty()
+            }.getOrDefault("")
+            runOnUiThread {
+                if (isFinishing || playlist == null) {
+                    if (playlist == null) toast(getString(R.string.channel_is_unavailable))
+                    finish()
+                    return@runOnUiThread
+                }
+                editing = playlist
+                type = playlist.type
+                draft = Draft(
+                    name = playlist.name,
+                    url = playlist.url,
+                    login = playlist.login,
+                    password = playlist.password,
+                    mac = playlist.mac,
+                    epg = epg,
+                )
+                showDetailsStep()
+            }
+        }
     }
 
     private fun showTypeStep() {
@@ -62,6 +132,7 @@ class PlaylistWizardActivity : AppCompatActivity() {
         titleView.setText(R.string.playlist_type)
         messageView.setText(R.string.select_playlist_type)
         messageView.visible(true)
+        typeView.visible(false)
         testButton.visible(false)
         okButton.setText(R.string.next)
         val items = listOf(
@@ -81,36 +152,62 @@ class PlaylistWizardActivity : AppCompatActivity() {
 
     private fun showDetailsStep() {
         onTypeStep = false
+        // A re-render happens when the type changes, so what is typed right now has to be kept.
+        if (inputs.isNotEmpty()) captureDraft()
         clearFields()
         when (type) {
             PlaylistType.FILE -> Unit
             PlaylistType.REMOTE_M3U -> {
-                titleView.setText(R.string.m3u_parameters)
-                addField(R.string.playlist_name, InputType.TYPE_CLASS_TEXT, defaultName())
-                addField(R.string.playlist_url, InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI, "")
-                addField(R.string.epg_url, InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI, "", optional = true)
+                titleView.setText(if (editing != null) R.string.edit_playlist else R.string.m3u_parameters)
+                addField(R.string.playlist_name, InputType.TYPE_CLASS_TEXT, draft.name.ifBlank { defaultName() })
+                addField(R.string.playlist_url, InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI, draft.url)
+                addField(R.string.epg_url, InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI, draft.epg, optional = true)
                 messageView.setText(R.string.m3u_parameters_hint)
             }
             PlaylistType.XTREAM -> {
-                titleView.setText(R.string.xtream_parameters)
-                addField(R.string.playlist_name, InputType.TYPE_CLASS_TEXT, defaultName())
-                addField(R.string.server_address, InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI, "http://")
-                addField(R.string.username, InputType.TYPE_CLASS_TEXT, "")
-                addField(R.string.password, InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD, "", password = true)
-                addField(R.string.epg_url, InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI, "", optional = true)
+                titleView.setText(if (editing != null) R.string.edit_playlist else R.string.xtream_parameters)
+                addField(R.string.playlist_name, InputType.TYPE_CLASS_TEXT, draft.name.ifBlank { defaultName() })
+                addField(R.string.server_address, InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI, draft.url.ifBlank { "http://" })
+                addField(R.string.username, InputType.TYPE_CLASS_TEXT, draft.login)
+                addField(R.string.password, InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD, draft.password, password = true)
+                addField(R.string.epg_url, InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI, draft.epg, optional = true)
                 messageView.setText(R.string.xtream_parameters_hint)
             }
             PlaylistType.STALKER -> {
-                titleView.setText(R.string.stalker_parameters)
-                addField(R.string.playlist_name, InputType.TYPE_CLASS_TEXT, defaultName())
-                addField(R.string.server_address, InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI, "http://")
-                addField(R.string.mac_address, InputType.TYPE_CLASS_TEXT, "00:1A:79:00:00:00")
+                titleView.setText(if (editing != null) R.string.edit_playlist else R.string.stalker_parameters)
+                addField(R.string.playlist_name, InputType.TYPE_CLASS_TEXT, draft.name.ifBlank { defaultName() })
+                addField(R.string.server_address, InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI, draft.url.ifBlank { "http://" })
+                addField(R.string.mac_address, InputType.TYPE_CLASS_TEXT, draft.mac.ifBlank { "00:1A:79:00:00:00" })
                 messageView.setText(R.string.stalker_parameters_hint)
             }
         }
         messageView.visible(true)
+        // Only editing can change the type of a stored playlist, and there it is offered right on
+        // the form: picking another one re-renders the fields and keeps the values that still fit.
+        typeView.visible(editing != null)
+        updateTypeLabel()
         testButton.visible(true)
-        okButton.setText(R.string.add)
+        okButton.setText(if (editing != null) R.string.save else R.string.add)
+    }
+
+    private fun updateTypeLabel() {
+        typeView.text = getString(R.string.playlist_type) + ": " + getString(typeLabel(type))
+    }
+
+    private fun chooseType() {
+        val items = listOf(
+            Dialogs.Item(getString(R.string.m3u_playlist), checked = type == PlaylistType.REMOTE_M3U),
+            Dialogs.Item(getString(R.string.xtream_codes), checked = type == PlaylistType.XTREAM),
+            Dialogs.Item(getString(R.string.stalker_portal), checked = type == PlaylistType.STALKER),
+        )
+        Dialogs.show(this, getString(R.string.playlist_type), getString(R.string.select_playlist_type), items) { which ->
+            type = listOf(
+                PlaylistType.REMOTE_M3U,
+                PlaylistType.XTREAM,
+                PlaylistType.STALKER,
+            )[which.coerceIn(0, 2)]
+            showDetailsStep()
+        }
     }
 
     private fun addField(labelRes: Int, type: Int, value: String, optional: Boolean = false, password: Boolean = false) {
@@ -137,6 +234,20 @@ class PlaylistWizardActivity : AppCompatActivity() {
         inputs.clear()
         statusView.visible(false)
         statusView.text = ""
+    }
+
+    private fun captureDraft() {
+        draft = Draft(
+            name = value(R.string.playlist_name),
+            url = when (type) {
+                PlaylistType.REMOTE_M3U -> value(R.string.playlist_url)
+                else -> value(R.string.server_address)
+            },
+            login = value(R.string.username),
+            password = secret(R.string.password),
+            mac = value(R.string.mac_address),
+            epg = value(R.string.epg_url),
+        )
     }
 
     private fun value(res: Int): String = inputs[res]?.text?.toString()?.trim().orEmpty()
@@ -184,33 +295,48 @@ class PlaylistWizardActivity : AppCompatActivity() {
             toast(getString(R.string.url_required))
             return
         }
+        captureDraft()
         okButton.isEnabled = false
         statusView.visible(true)
         statusView.setTextColor(ContextCompat.getColor(this, R.color.text_secondary))
         statusView.text = getString(R.string.processing)
-        val name = value(R.string.playlist_name).ifBlank { defaultName() }
-        val epg = value(R.string.epg_url)
-        val login = value(R.string.username)
-        val password = secret(R.string.password)
-        val mac = value(R.string.mac_address)
+        val playlist = editing
+        val name = draft.name.ifBlank { defaultName() }
+        // A type has its own set of values, so switching the type must not leave the values of the
+        // old one behind in the record.
+        val login = if (type == PlaylistType.XTREAM) draft.login else ""
+        val password = if (type == PlaylistType.XTREAM) draft.password else ""
+        val mac = if (type == PlaylistType.STALKER) draft.mac else ""
         val target = serverOrUrl()
         Thread {
             val result = runCatching {
                 val repo = TvBroApp.repo(this)
-                val playlistId = repo.insertPlaylist(
-                    Playlist(
-                        name = name,
-                        type = type,
-                        url = target,
-                        login = login,
-                        password = password,
-                        mac = mac,
-                        lastUpdate = 0,
+                val playlistId = if (playlist == null) {
+                    repo.insertPlaylist(
+                        Playlist(
+                            name = name,
+                            type = type,
+                            url = target,
+                            login = login,
+                            password = password,
+                            mac = mac,
+                            lastUpdate = 0,
+                        )
                     )
-                )
-                if (epg.isNotBlank()) {
-                    repo.insertEpgSource(EpgSource(name = name, url = epg, playlistId = playlistId))
+                } else {
+                    repo.updatePlaylist(
+                        playlist.copy(
+                            name = name,
+                            type = type,
+                            url = target,
+                            login = login,
+                            password = password,
+                            mac = mac,
+                        )
+                    )
+                    playlist.id
                 }
+                bindEpg(repo, playlistId, name)
                 val channels = when (type) {
                     PlaylistType.XTREAM -> XtreamApi(server(), login, password).loadChannels()
                     PlaylistType.STALKER -> StalkerApi(server(), mac.ifBlank { null }).loadChannels()
@@ -234,6 +360,22 @@ class PlaylistWizardActivity : AppCompatActivity() {
         }.start()
     }
 
+    /**
+     * The EPG url of the form belongs to the playlist: an existing binding is pointed at the new
+     * address, a new one is added, and an empty field leaves the bindings alone instead of dropping
+     * an EPG the user set up elsewhere.
+     */
+    private fun bindEpg(repo: TvBroRepository, playlistId: Long, name: String) {
+        val url = draft.epg.trim()
+        if (url.isBlank()) return
+        val existing = repo.epgSources().firstOrNull { it.playlistId == playlistId }
+        if (existing == null) {
+            repo.insertEpgSource(EpgSource(name = name, url = url, playlistId = playlistId))
+        } else {
+            repo.updateEpgSource(existing.copy(name = name, url = url, enabled = true))
+        }
+    }
+
     private fun defaultName(): String = when (type) {
         PlaylistType.REMOTE_M3U -> getString(R.string.m3u_playlist)
         PlaylistType.XTREAM -> getString(R.string.xtream_codes)
@@ -241,11 +383,26 @@ class PlaylistWizardActivity : AppCompatActivity() {
         PlaylistType.FILE -> getString(R.string.local_file)
     }.lowercase(Locale.getDefault()).replaceFirstChar { it.uppercase() }
 
+    private fun typeLabel(type: PlaylistType): Int = when (type) {
+        PlaylistType.REMOTE_M3U -> R.string.m3u_playlist
+        PlaylistType.XTREAM -> R.string.xtream_codes
+        PlaylistType.STALKER -> R.string.stalker_portal
+        PlaylistType.FILE -> R.string.local_file
+    }
+
     companion object {
         const val EXTRA_CHANNELS = "channels"
+        const val EXTRA_PLAYLIST_ID = "playlist_id"
 
         fun start(activity: Activity) {
             activity.startActivity(Intent(activity, PlaylistWizardActivity::class.java))
+        }
+
+        fun startEdit(activity: Activity, playlistId: Long) {
+            activity.startActivity(
+                Intent(activity, PlaylistWizardActivity::class.java)
+                    .putExtra(EXTRA_PLAYLIST_ID, playlistId)
+            )
         }
     }
 }

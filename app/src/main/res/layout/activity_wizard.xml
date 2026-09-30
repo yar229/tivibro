@@ -24,6 +24,21 @@
         android:visibility="gone"
         tools:text="Select the playlist type" />
 
+    <!-- Shown while a stored playlist is being edited: the type is part of what can be corrected. -->
+    <TextView
+        android:id="@+id/wizard_type"
+        style="@style/TvBro.NavItemLabel"
+        android:layout_width="wrap_content"
+        android:layout_height="@dimen/touch_target"
+        android:layout_marginTop="@dimen/spacing_md"
+        android:background="@drawable/bg_group_item"
+        android:focusable="true"
+        android:gravity="center"
+        android:paddingStart="@dimen/spacing_lg"
+        android:paddingEnd="@dimen/spacing_lg"
+        android:visibility="gone"
+        tools:text="Type: Xtream Codes" />
+
     <LinearLayout
         android:id="@+id/wizard_fields"
         android:layout_width="match_parent"
