@@ -48,12 +48,15 @@
                 tools:text="1st Playlist / Sports" />
         </LinearLayout>
 
-        <LinearLayout
-            android:id="@+id/nav_buttons"
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/days_list"
             android:layout_width="wrap_content"
             android:layout_height="match_parent"
-            android:gravity="center_vertical"
-            android:orientation="horizontal" />
+            android:layout_marginStart="@dimen/spacing_md"
+            android:layout_marginEnd="@dimen/spacing_md"
+            android:clipToPadding="false"
+            android:nextFocusDown="@id/guide_channels_list"
+            android:scrollbars="none" />
 
         <LinearLayout
             android:id="@+id/clock_container"
@@ -79,12 +82,144 @@
         </LinearLayout>
     </LinearLayout>
 
-    <!-- Content -->
+    <!-- Programme details and the picture of the running stream, a strip of its own above the
+         guide: it must never cover the grid. Its height is a fraction of the screen (a bit less
+         than a third), set in code, so the same proportion holds on the TV and on the tablet. The
+         description is cut instead of the strip growing. -->
+    <LinearLayout
+        android:id="@+id/guide_info_panel"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@color/bg_app"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="@dimen/spacing_lg"
+        android:paddingEnd="@dimen/spacing_lg">
+
+        <!-- The stream that was left running shows up here, without being restarted. The slot keeps
+             its place and its size in every state, so without a stream it shows the sign of a
+             television instead of an empty hole. -->
+        <FrameLayout
+            android:id="@+id/guide_info_slot"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:layout_marginEnd="@dimen/spacing_lg"
+            android:background="@color/panel_solid">
+
+            <ImageView
+                android:id="@+id/guide_info_placeholder"
+                android:layout_width="@dimen/guide_info_placeholder_size"
+                android:layout_height="@dimen/guide_info_placeholder_size"
+                android:layout_gravity="center"
+                android:alpha="0.35"
+                android:contentDescription="@null"
+                android:focusable="false"
+                android:focusableInTouchMode="false"
+                android:importantForAccessibility="no"
+                android:src="@drawable/ic_tv" />
+
+            <FrameLayout
+                android:id="@+id/guide_info_player"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent" />
+        </FrameLayout>
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <LinearLayout
+                android:id="@+id/guide_info_programme"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/guide_info_title"
+                    style="@style/TvBro.Text.Title"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:maxWidth="@dimen/guide_info_title_width"
+                    android:textSize="@dimen/text_lg"
+                    tools:text="Live: Premier League" />
+
+                <!-- Time, how much of it is over and how much is left, the same three parts the
+                     bottom panel of the player uses: a bar carries the progress, so no percentage
+                     has to be read as text. -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:id="@+id/guide_info_time"
+                        style="@style/TvBro.Text.Time"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:textSize="@dimen/text_sm"
+                        tools:text="20:15 - 21:00" />
+
+                    <ProgressBar
+                        android:id="@+id/guide_info_progress"
+                        style="?android:attr/progressBarStyleHorizontal"
+                        android:layout_width="80dp"
+                        android:layout_height="2dp"
+                        android:layout_marginStart="@dimen/spacing_md"
+                        android:layout_marginEnd="@dimen/spacing_md"
+                        android:progressDrawable="@drawable/progress_switch" />
+
+                    <TextView
+                        android:id="@+id/guide_info_remaining"
+                        style="@style/TvBro.Text.Time"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:textSize="@dimen/text_sm"
+                        tools:text="-0:23" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/guide_info_description"
+                style="@style/TvBro.Text.Subtitle"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_marginTop="@dimen/spacing_xs"
+                android:layout_weight="1"
+                android:ellipsize="end"
+                android:textSize="@dimen/guide_info_description_text"
+                tools:text="Live coverage of the match from the commentary booth." />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- The line that ends the strip. It is a sibling and not a border of the panel, so the strip
+         keeps the exact height of the video slot. -->
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="@color/divider" />
+
+    <!-- Content: menu strip (left arrow twice) | groups (left arrow once) | guide -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
         android:orientation="horizontal">
+
+        <LinearLayout
+            android:id="@+id/menu_strip"
+            android:layout_width="@dimen/nav_strip_width"
+            android:layout_height="match_parent"
+            android:background="@drawable/osd_scrim_top"
+            android:nextFocusRight="@id/groups_list"
+            android:orientation="vertical"
+            android:paddingStart="@dimen/spacing_xs"
+            android:paddingTop="@dimen/spacing_sm"
+            android:paddingEnd="@dimen/spacing_xs"
+            android:paddingBottom="@dimen/spacing_sm"
+            android:visibility="gone" />
 
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/groups_list"
@@ -92,36 +227,92 @@
             android:layout_height="match_parent"
             android:background="@drawable/osd_scrim_top"
             android:clipToPadding="false"
+            android:nextFocusRight="@id/guide_channels_list"
             android:paddingStart="@dimen/spacing_sm"
             android:paddingTop="@dimen/spacing_sm"
             android:paddingEnd="@dimen/spacing_sm"
             android:paddingBottom="@dimen/spacing_sm"
-            android:scrollbars="none" />
+            android:scrollbars="none"
+            android:visibility="gone" />
 
-        <FrameLayout
+        <LinearLayout
             android:layout_width="0dp"
             android:layout_height="match_parent"
-            android:layout_weight="1">
+            android:layout_weight="1"
+            android:orientation="horizontal">
 
-            <androidx.recyclerview.widget.RecyclerView
-                android:id="@+id/channels_list"
-                android:layout_width="match_parent"
+            <!-- The time scale belongs to the grid, but it must not push the grid down: the channel
+                 column has to start on the very same line as the first row of programmes, or every
+                 channel name would sit one scale height above its own programmes. An empty corner
+                 keeps that line free above the column, so both lists share one top edge. -->
+            <LinearLayout
+                android:layout_width="@dimen/guide_channel_column"
                 android:layout_height="match_parent"
-                android:clipToPadding="false"
-                android:padding="@dimen/spacing_sm"
-                android:scrollbars="none" />
+                android:orientation="vertical">
 
-            <TextView
-                android:id="@+id/empty_view"
-                style="@style/TvBro.Text.Subtitle"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_gravity="center"
-                android:gravity="center"
-                android:padding="@dimen/spacing_xl"
-                android:text="@string/no_channels"
-                android:visibility="gone" />
-        </FrameLayout>
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="@dimen/epg_ruler_height" />
+
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/guide_channels_list"
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/osd_scrim_top"
+                    android:scrollbars="none" />
+            </LinearLayout>
+
+            <View
+                android:layout_width="1dp"
+                android:layout_height="match_parent"
+                android:background="@color/divider" />
+
+            <LinearLayout
+                android:id="@+id/grid_container"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <com.tvibro.ui.main.guide.TimeRulerView
+                    android:id="@+id/time_ruler"
+                    android:layout_width="wrap_content"
+                    android:layout_height="@dimen/epg_ruler_height"
+                    android:focusable="false"
+                    android:focusableInTouchMode="false" />
+
+                <FrameLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp"
+                    android:layout_weight="1">
+
+                    <androidx.recyclerview.widget.RecyclerView
+                        android:id="@+id/programs_rows"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:scrollbars="none" />
+
+                    <TextView
+                        android:id="@+id/empty_view"
+                        style="@style/TvBro.Text.Subtitle"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="center"
+                        android:gravity="center"
+                        android:padding="@dimen/spacing_xl"
+                        android:text="@string/no_channels"
+                        android:visibility="gone" />
+
+                    <View
+                        android:id="@+id/now_line"
+                        android:layout_width="@dimen/epg_now_line"
+                        android:layout_height="match_parent"
+                        android:background="@color/accent"
+                        android:visibility="gone" />
+                </FrameLayout>
+            </LinearLayout>
+        </LinearLayout>
     </LinearLayout>
 
     <!-- Bottom status line -->

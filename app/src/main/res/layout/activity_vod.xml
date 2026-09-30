@@ -1,12 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:app="http://schemas.android.com/apk/res-auto" xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
     android:keepScreenOn="true">
 
+    <!-- Top bar -->
     <LinearLayout
+        android:id="@+id/top_bar"
         android:layout_width="match_parent"
         android:layout_height="@dimen/header_height"
         android:gravity="center_vertical"
@@ -16,33 +19,43 @@
         android:background="@drawable/osd_scrim_bottom">
 
         <ImageView
-            android:id="@+id/back_button"
-            android:layout_width="@dimen/touch_target"
-            android:layout_height="@dimen/touch_target"
-            android:background="@drawable/bg_player_button"
-            android:contentDescription="@string/back"
-            android:focusable="true"
-            android:padding="@dimen/spacing_md"
-            android:src="@drawable/ic_arrow_back" />
+            android:id="@+id/app_logo"
+            android:layout_width="28dp"
+            android:layout_height="28dp"
+            android:contentDescription="@string/app_name"
+            android:src="@drawable/ic_movie"
+            app:tint="@color/accent" />
 
-        <TextView
-            android:id="@+id/guide_title"
-            style="@style/TvBro.Text.Title"
+        <LinearLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_marginStart="@dimen/spacing_md"
             android:layout_weight="1"
-            android:text="@string/tv_guide" />
+            android:layout_marginStart="@dimen/spacing_md"
+            android:orientation="vertical">
 
-        <androidx.recyclerview.widget.RecyclerView
-            android:id="@+id/days_list"
+            <TextView
+                android:id="@+id/title"
+                style="@style/TvBro.Text.Title"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                tools:text="@string/movies" />
+
+            <TextView
+                android:id="@+id/subtitle"
+                style="@style/TvBro.Text.Time"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/nav_buttons"
             android:layout_width="wrap_content"
             android:layout_height="match_parent"
-            android:clipToPadding="false"
-            android:orientation="horizontal"
-            android:scrollbars="none" />
+            android:gravity="center_vertical"
+            android:orientation="horizontal" />
     </LinearLayout>
 
+    <!-- Content -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
@@ -50,39 +63,46 @@
         android:orientation="horizontal">
 
         <androidx.recyclerview.widget.RecyclerView
-            android:id="@+id/channels_list"
-            android:layout_width="@dimen/epg_logo_w"
+            android:id="@+id/groups_list"
+            android:layout_width="@dimen/card_size"
             android:layout_height="match_parent"
             android:background="@drawable/osd_scrim_top"
+            android:clipToPadding="false"
+            android:paddingStart="@dimen/spacing_sm"
+            android:paddingTop="@dimen/spacing_sm"
+            android:paddingEnd="@dimen/spacing_sm"
+            android:paddingBottom="@dimen/spacing_sm"
             android:scrollbars="none" />
 
-        <View
-            android:layout_width="1dp"
-            android:layout_height="match_parent"
-            android:background="@color/divider" />
-
         <FrameLayout
-            android:id="@+id/grid_container"
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_weight="1">
 
             <androidx.recyclerview.widget.RecyclerView
-                android:id="@+id/programs_rows"
+                android:id="@+id/channels_list"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
+                android:clipToPadding="false"
+                android:padding="@dimen/spacing_sm"
                 android:scrollbars="none" />
 
-            <View
-                android:id="@+id/now_line"
-                android:layout_width="2dp"
-                android:layout_height="match_parent"
-                android:background="@color/accent"
+            <TextView
+                android:id="@+id/empty_view"
+                style="@style/TvBro.Text.Subtitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:gravity="center"
+                android:padding="@dimen/spacing_xl"
+                android:text="@string/no_movies"
                 android:visibility="gone" />
         </FrameLayout>
     </LinearLayout>
 
+    <!-- Bottom status line -->
     <LinearLayout
+        android:id="@+id/status_bar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:gravity="center_vertical"
@@ -94,17 +114,11 @@
         android:background="@drawable/osd_scrim_bottom">
 
         <TextView
-            android:id="@+id/guide_status"
+            android:id="@+id/status_text"
             style="@style/TvBro.Text.Time"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            tools:text="150 channels" />
-
-        <TextView
-            style="@style/TvBro.Text.Time"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/press_ok_to_turn_on" />
+            tools:text="150" />
     </LinearLayout>
 </LinearLayout>

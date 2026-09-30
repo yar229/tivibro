@@ -103,6 +103,7 @@ private lateinit var switchAudioCodec: TextView
     private val sideProgramDebounce = Runnable { loadSideProgramDetails(sideProgramLoadId) }
     private var sideChannelPosition = 0
     private var sideSchedulePosition = 0
+    private var answeredConfirm = 0L
     private var sideChannelsLoaded = false
     private lateinit var osdHeader: View
     private lateinit var osdLogo: ImageView
@@ -145,6 +146,13 @@ private var panelTimeout = 0L
     private var sleepTimerAt = 0L
     private var hidden = false
     private var keepPlayingBehind = false
+    /**
+     * The picture is leaving for the guide panel instead of being released: the stream has to keep
+     * running, so neither the engine, nor the audio focus, nor the watch time may be dropped here.
+     */
+    private var handedOver = false
+    /** The engine was released because the app went into the background; it has to be requested again. */
+    private var engineFreed = false
     private var isSwitching = false
     private var bufferingChannelId: Long = -1L
     /** Last known stream metadata per channel (resolution/fps/audio), reused while a fresh
@@ -209,12 +217,34 @@ private var panelTimeout = 0L
     override fun onDestroy() {
         super.onDestroy()
         main.removeCallbacks(clearBuffering)
-        saveWatchTime()
-        if (::engine.isInitialized) engine.release()
+        if (handedOver) {
+            // The guide panel adopts the picture: the engine, the audio focus and the position all
+            // have to survive this window, only the callbacks of this activity are dropped.
+            Playback.detachCallbacks()
+        } else {
+            saveWatchTime()
+            releaseEngine()
+            abandonAudioFocus()
+        }
         executor.shutdownNow()
         main.removeCallbacksAndMessages(null)
-        abandonAudioFocus()
     }
+
+    /**
+     * The app is not on screen any more. A tuner serves one channel at a time, so the stream is
+     * stopped and its connection closed: while it would sit in the background, no other player
+     * could take the same source. Coming back reloads the channel.
+     */
+    override fun onStop() {
+        super.onStop()
+        if (handedOver || isFinishing) return
+        if (!TvBroApp.get().inForeground) {
+            saveWatchTime()
+            releaseEngine()
+            abandonAudioFocus()
+        }
+    }
+
 
     override fun onPause() {
         super.onPause()
@@ -303,6 +333,13 @@ private var panelTimeout = 0L
     override fun onResume() {
         super.onResume()
         keepPlayingBehind = false
+        if (engineFreed && !isFinishing) {
+            // The stream was released while the app was in the background, so the source is free
+            // again and this channel has to be requested once more.
+            engineFreed = false
+            val id = channel?.id ?: requestedChannelId
+            if (id > 0L) loadChannel(id)
+        }
         if (::engine.isInitialized && !hidden) engine.play()
         // font scales can change while Settings is open on top of the player
         if (::sideChannelAdapter.isInitialized) applyPanelFontScales()
@@ -474,12 +511,32 @@ captureFontScale(switchAudioCodec) { prefs.bottomPanelFont }
                 repo.addHistory(ch.id, 0)
                 val index = channelIds.indexOfFirst { it == ch.id }
                 if (index >= 0) currentIndex = index
-                prepareEngine(ch, pl, fromStart)
+                if (!resumeRunningStream(ch)) {
+                    prepareEngine(ch, pl, fromStart)
+                }
                 updateOsd()
                 showSwitchPanel()
                 isSwitching = false
             }
         }
+    }
+
+    /**
+     * The guide panel can leave the stream running, and the user may then open the very same channel
+     * again. Re-preparing would throw the running stream away for nothing, so the stream is only
+     * taken over as it is, together with the position it has reached.
+     */
+    private fun resumeRunningStream(ch: Channel): Boolean {
+        val current = Playback.engine() ?: return false
+        if (!Playback.active() || Playback.channelId() != ch.id) return false
+        if (current.positionMs() <= 0L && current.durationMs() <= 0L) return false
+        engine = current
+        Playback.attachToPlayer(engineHolder)
+        Playback.markChannel(ch.id, ch.name)
+        wireEngine()
+        requestAudioFocus()
+        current.play()
+        return true
     }
 
     private fun prepareEngine(ch: Channel, pl: Playlist?, fromStart: Boolean) {
@@ -490,13 +547,14 @@ captureFontScale(switchAudioCodec) { prefs.bottomPanelFont }
         }
         val userAgent = pl?.userAgent.orEmpty()
         val start = if (fromStart || ch.progressMs <= 0) 0L else ch.progressMs
+        Playback.markChannel(ch.id, ch.name)
 
         // engine setup can fail on exotic devices or bad settings: report it instead
         // of letting the exception kill the whole process. If VLC cannot be initialized,
         // fall back to ExoPlayer so playback still works.
         try {
-            if (!::engine.isInitialized) {
-                engine = createEngine(preferVlc = prefs.engine == "vlc")
+            if (!::engine.isInitialized || Playback.engine() !== engine) {
+                engine = adoptOrCreateEngine()
                 wireEngine()
             }
             // Keep the player's internal volume at 1.0 and let the system stream
@@ -524,9 +582,11 @@ captureFontScale(switchAudioCodec) { prefs.bottomPanelFont }
         if (::engine.isInitialized) {
             runCatching { engine.release() }
             engineHolder.removeAllViews()
+            Playback.forget(engine)
         }
         try {
             engine = createEngine(preferVlc = true)
+            Playback.claim(engine, engineHolder)
             wireEngine()
             val url = resolveUrl(ch, pl)
             if (url.isBlank()) {
@@ -551,7 +611,9 @@ captureFontScale(switchAudioCodec) { prefs.bottomPanelFont }
     private fun createEngine(preferVlc: Boolean): PlaybackEngine {
         if (preferVlc) {
             try {
-                val vlc = VlcEngine(this, engineHolder)
+                // The VLC surface outlives this window when the stream moves into the guide panel,
+                // so it is built with the application context and cannot keep this activity alive.
+                val vlc = VlcEngine(TvBroApp.get(), engineHolder)
                 exoEngine = null
                 return vlc
             } catch (t: Throwable) {
@@ -568,6 +630,22 @@ captureFontScale(switchAudioCodec) { prefs.bottomPanelFont }
         exo.setHardwareDecoder(prefs.videoDecoder != "software")
         exoEngine = exo
         return exo
+    }
+
+    /**
+     * The engine outlives its window: coming back from the guide panel reuses the running stream
+     * and only moves its picture into this window, so the channel is not started over. A new engine
+     * is created and registered only when there is nothing to take over.
+     */
+    private fun adoptOrCreateEngine(): PlaybackEngine {
+        val existing = Playback.engine()
+        if (existing != null) {
+            Playback.attachToPlayer(engineHolder)
+            return existing
+        }
+        val created = createEngine(preferVlc = prefs.engine == "vlc")
+        Playback.claim(created, engineHolder)
+        return created
     }
 
     private fun errorMessage(t: Throwable): String =
@@ -1295,6 +1373,42 @@ captureFontScale(switchAudioCodec) { prefs.bottomPanelFont }
         saveWatchTime()
         val result = Intent()
         setResult(Activity.RESULT_OK, result)
+        // onDestroy releases the engine and forgets it, so the guide panel falls back to its empty
+        // video slot instead of keeping a dead surface.
+        finish()
+    }
+
+    /**
+     * Frees the decoder and closes the network session. Safe to call more than once: the second call
+     * finds the engine already gone and does nothing.
+     */
+    private fun releaseEngine() {
+        if (!::engine.isInitialized || engineFreed) return
+        engineFreed = true
+        val used = engine
+        runCatching { used.release() }
+        engineHolder.removeAllViews()
+        // The guide panel must not find a dead engine waiting in the holder.
+        Playback.forget(used)
+        exoEngine = null
+    }
+
+    /**
+     * Leaving the full screen player does not stop anything: the stream keeps running and the
+     * picture moves into the guide panel, which is the only place left that can show it. The engine,
+     * the audio focus and the reached position are all handed over untouched.
+     */
+    private fun shrinkToGuidePanel() {
+        if (!::engine.isInitialized) {
+            stopPlayback()
+            return
+        }
+        saveWatchTime()
+        handedOver = true
+        keepPlayingBehind = true
+        Playback.markChannel(channel?.id ?: requestedChannelId, channel?.name.orEmpty())
+        Playback.detachCallbacks()
+        setResult(Activity.RESULT_OK, Intent())
         finish()
     }
 
@@ -1395,19 +1509,59 @@ captureFontScale(switchAudioCodec) { prefs.bottomPanelFont }
             resetPanelTimeout()
             if (switchPanel.visibility == View.VISIBLE) resetSwitchTimeout()
         }
+        if (sideChannelsVisible && isConfirmKey(event)) return confirmSideChannel(event)
         return super.dispatchKeyEvent(event)
+    }
+
+    private fun isConfirmKey(event: KeyEvent): Boolean {
+        if (event.action != KeyEvent.ACTION_DOWN && event.action != KeyEvent.ACTION_UP) return false
+        return when (event.keyCode) {
+            // BUTTON_A is what a lot of TV box remotes send for the centre key.
+            KeyEvent.KEYCODE_DPAD_CENTER,
+            KeyEvent.KEYCODE_ENTER,
+            KeyEvent.KEYCODE_NUMPAD_ENTER,
+            KeyEvent.KEYCODE_BUTTON_A,
+            -> true
+            else -> false
+        }
+    }
+
+    /**
+     * The centre key of the remote has to pick the channel of the row under the crosshair on the
+     * first press. The row that holds the focus turns the release of the key into a click, so an
+     * answer given on the press would be repeated by its own release, and the row of a panel that
+     * was opened a moment ago can still be without the focus when the key arrives. The key is
+     * therefore taken here, ahead of the row, and answered exactly once per press.
+     */
+    private fun confirmSideChannel(event: KeyEvent): Boolean {
+        if (event.action == KeyEvent.ACTION_UP) {
+            if (event.downTime == answeredConfirm) answeredConfirm = 0L
+            return true
+        }
+        if (event.repeatCount > 0) return true
+        // The schedule beside the list only describes the channel that is shown, so the crosshair
+        // there has nothing to pick.
+        if (!sideScheduleList.hasFocus()) selectSideChannelUnderFocus()
+        answeredConfirm = event.downTime
+        return true
+    }
+
+    /**
+     * Switches to the channel of the row the remote stands on. The position comes from the view tree
+     * with the row that was focused last as the fallback, so a press that arrives before the focus
+     * of the freshly opened panel has settled still picks the channel the panel opened on.
+     */
+    private fun selectSideChannelUnderFocus() {
+        val position = focusedPosition(sideChannelsList, sideChannelPosition)
+        val target = sideChannelAdapter.getChannel(position) ?: return
+        sideChannelPosition = position
+        selectSideChannel(target.id)
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
         val ch = channel
         when (keyCode) {
             KeyEvent.KEYCODE_DPAD_CENTER -> {
-                if (sideChannelsVisible) {
-                    val holder = sideChannelsList.findFocus() as? SideChannelAdapter.Holder
-                    val position = holder?.bindingAdapterPosition ?: RecyclerView.NO_POSITION
-                    sideChannelAdapter.getChannel(position)?.let { selectSideChannel(it.id) }
-                    return true
-                }
                 if (isFocusInsideOsd()) {
                     currentFocus?.takeIf { it !== osdPanel && it !== panelButtons }?.performClick()
                     resetPanelTimeout()
@@ -1544,7 +1698,7 @@ captureFontScale(switchAudioCodec) { prefs.bottomPanelFont }
                     hidePanels()
                     return true
                 }
-                stopPlayback()
+                shrinkToGuidePanel()
                 return true
             }
         }

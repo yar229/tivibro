@@ -1,16 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<!--
+    The row clips its content and never scrolls on its own: the whole grid is moved by one shared
+    offset, applied to @id/programs as a translationX. A scrolling child per row had to be kept in
+    sync frame by frame, which flickered and made the shared position unreliable.
+-->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="@dimen/channel_row_min_height"
-    android:orientation="horizontal"
     android:background="@color/surface"
-    android:focusable="true">
+    android:clipChildren="true"
+    android:focusable="false">
 
-    <androidx.recyclerview.widget.RecyclerView
+    <LinearLayout
         android:id="@+id/programs"
-        android:layout_width="match_parent"
+        android:layout_width="wrap_content"
         android:layout_height="match_parent"
-        android:clipToPadding="false"
-        android:scrollbars="none" />
-</LinearLayout>
+        android:orientation="horizontal"
+        tools:ignore="UselessParent" />
+</FrameLayout>

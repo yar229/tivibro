@@ -827,7 +827,7 @@
     <string name="show_description_when_switching_channels_only">Show description when switching channels only</string>
     <string name="channel_logo">Channel logo</string>
     <string name="app_logo">App logo</string>
-    <string name="switch_desc_lines">Max lines of program description in info popup</string>
+    <string name="switch_desc_lines">Max programme description lines</string>
     <!-- Settings groups -->
     <string name="home_screen">Home screen</string>
     <string name="playlists_and_channels">Playlists and channels</string>

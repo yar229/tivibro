@@ -107,10 +107,6 @@ class Prefs private constructor(context: Context) {
         get() = sp.getBoolean(KEY_HISTORY_BUTTON, true)
         set(v) = sp.edit { putBoolean(KEY_HISTORY_BUTTON, v) }
 
-    var showGuideButton: Boolean
-        get() = sp.getBoolean(KEY_GUIDE_BUTTON, true)
-        set(v) = sp.edit { putBoolean(KEY_GUIDE_BUTTON, v) }
-
     var showPlaylistAndGroupName: Boolean
         get() = sp.getBoolean(KEY_SHOW_PL_GROUP, true)
         set(v) = sp.edit { putBoolean(KEY_SHOW_PL_GROUP, v) }
@@ -534,8 +530,7 @@ class Prefs private constructor(context: Context) {
         const val KEY_ALL_CHANNELS_CATEGORY = "all_channels_category"
         const val KEY_ALL_PLAYLISTS_CATEGORY = "all_playlists_category"
         const val KEY_FAVORITES_CATEGORY = "favorites_category"
-        const val KEY_HISTORY_BUTTON = "history_button"
-        const val KEY_GUIDE_BUTTON = "guide_button"
+    const val KEY_HISTORY_BUTTON = "history_button"
         const val KEY_SHOW_PL_GROUP = "show_pl_group"
         const val KEY_HL_CURRENT_CHANNEL = "hl_current_channel"
         const val KEY_HL_CURRENT_PROGRAMS = "hl_current_programs"
