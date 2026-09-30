@@ -43,4 +43,11 @@
     <dimen name="channel_grid_columns">5</dimen>
     <dimen name="search_field_height">36dp</dimen>
     <dimen name="epg_hour_width">160dp</dimen>
+    <dimen name="nav_strip_width">92dp</dimen>
+    <dimen name="guide_channel_column">168dp</dimen>
+    <dimen name="epg_cell_margin">1dp</dimen>
+    <dimen name="epg_ruler_height">26dp</dimen>
+    <dimen name="epg_ruler_text">12sp</dimen>
+    <dimen name="epg_ruler_tick">1dp</dimen>
+    <dimen name="epg_now_line">3dp</dimen>
 </resources>

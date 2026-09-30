@@ -87,14 +87,6 @@
         </activity>
 
         <activity
-            android:name=".ui.guide.TvGuideActivity"
-            android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenLayout|screenSize|smallestScreenSize|uiMode"
-            android:exported="false"
-            android:screenOrientation="landscape"
-            android:theme="@style/Theme.TvBro"
-            tools:ignore="DiscouragedApi,LockedOrientationActivity" />
-
-        <activity
             android:name=".ui.vod.VodActivity"
             android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenLayout|screenSize|smallestScreenSize|uiMode"
             android:exported="false"

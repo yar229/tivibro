@@ -43,7 +43,7 @@ class VodActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         prefs = Prefs.get(this)
         repo = TvBroApp.repo(this)
-        setContentView(R.layout.activity_main)
+        setContentView(R.layout.activity_vod)
 
         statusView = findViewById(R.id.status_text)
         titleView = findViewById(R.id.title)

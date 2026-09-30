@@ -1,16 +1,23 @@
 package com.tvibro.ui.main
 
+import android.animation.ValueAnimator
 import android.content.Intent
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.view.Choreographer
 import android.view.KeyEvent
 import android.view.LayoutInflater
+import android.view.MotionEvent
+import android.view.VelocityTracker
 import android.view.View
+import android.view.ViewConfiguration
+import android.view.ViewGroup
+import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
-import androidx.recyclerview.widget.GridLayoutManager
+import androidx.core.view.doOnPreDraw
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.tvibro.R
@@ -22,8 +29,12 @@ import com.tvibro.data.Prefs
 import com.tvibro.data.db.TvBroRepository
 import com.tvibro.data.model.Channel
 import com.tvibro.data.model.ChannelFilter
+import com.tvibro.data.model.Program
 import com.tvibro.ui.common.Dialogs
-import com.tvibro.ui.guide.TvGuideActivity
+import com.tvibro.ui.main.guide.GuideChannelsAdapter
+import com.tvibro.ui.main.guide.GuideDaysAdapter
+import com.tvibro.ui.main.guide.GuideRowsAdapter
+import com.tvibro.ui.main.guide.TimeRulerView
 import com.tvibro.ui.pin.PinActivity
 import com.tvibro.ui.player.PlayerActivity
 import com.tvibro.ui.playlist.PlaylistWizardActivity
@@ -40,9 +51,17 @@ class MainActivity : AppCompatActivity() {
     private lateinit var prefs: Prefs
     private lateinit var repo: TvBroRepository
     private lateinit var groupsAdapter: GroupsAdapter
-    private lateinit var channelAdapter: ChannelAdapter
+    private lateinit var guideChannelsAdapter: GuideChannelsAdapter
+    private lateinit var guideRowsAdapter: GuideRowsAdapter
+    private lateinit var daysAdapter: GuideDaysAdapter
     private lateinit var groupsList: RecyclerView
-    private lateinit var channelsList: RecyclerView
+    private lateinit var guideChannelsList: RecyclerView
+    private lateinit var programsList: RecyclerView
+    private lateinit var daysList: RecyclerView
+    private lateinit var menuStrip: LinearLayout
+    private lateinit var gridContainer: LinearLayout
+    private lateinit var timeRuler: TimeRulerView
+    private lateinit var nowLine: View
     private lateinit var emptyView: TextView
     private lateinit var statusText: TextView
     private lateinit var clockView: TextView
@@ -51,11 +70,25 @@ class MainActivity : AppCompatActivity() {
     private lateinit var subtitleView: TextView
 
     private val executor = Executors.newSingleThreadExecutor { r -> Thread(r, "tvibro-main").apply { isDaemon = true } }
+    // A whole day of EPG for a large group is a heavy query, it must not block channel loading
+    private val guideExecutor = Executors.newSingleThreadExecutor { r -> Thread(r, "tvibro-guide").apply { isDaemon = true } }
     private val main = Handler(Looper.getMainLooper())
 
     private var categories: List<Category> = emptyList()
     private var currentChannels: List<Channel> = emptyList()
-    private var lastProgressLoad = 0L
+    private var guidePrograms: Map<Long, List<Program>> = emptyMap()
+    private val guideCache = object : LinkedHashMap<String, Map<Long, List<Program>>>(4, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Map<Long, List<Program>>>): Boolean =
+            size > GUIDE_CACHE_MAX
+    }
+    private var guideLoadId = 0L
+    private var syncingRows = false
+    private var lastSyncPosition = RecyclerView.NO_POSITION
+    private var lastSyncTop = 0
+    private var dayStart = 0L
+    private var dayIndex = 0
+    private var leftStage = STAGE_CONTENT
+    private var pendingFocus = true
     private var firstResume = true
     private var pendingAutoPlay = false
     private var playerLaunched = false
@@ -72,7 +105,7 @@ class MainActivity : AppCompatActivity() {
         repo = TvBroApp.repo(this)
 
         bindViews()
-        buildNavButtons()
+        buildMenuStrip()
         startClock()
 
         groupsAdapter = GroupsAdapter(
@@ -82,13 +115,49 @@ class MainActivity : AppCompatActivity() {
         groupsList.layoutManager = LinearLayoutManager(this)
         groupsList.adapter = groupsAdapter
 
-        channelAdapter = ChannelAdapter(
-            context = this,
-            onClick = { index -> onChannelClick(index) },
-            onLongClick = { index -> onChannelLongClick(index) },
+        daysAdapter = GuideDaysAdapter(GUIDE_DAYS) { index -> selectDay(index) }
+        daysList.layoutManager = LinearLayoutManager(this, RecyclerView.HORIZONTAL, false)
+        daysList.adapter = daysAdapter
+
+        guideChannelsAdapter = GuideChannelsAdapter(
+            onClick = { position -> onGuideChannelClick(position) },
+            onLongClick = { position -> onChannelLongClick(position) },
         )
-        channelsList.layoutManager = GridLayoutManager(this, spanCount())
-        channelsList.adapter = channelAdapter
+        guideChannelsList.layoutManager = LinearLayoutManager(this)
+        guideChannelsList.adapter = guideChannelsAdapter
+
+        guideRowsAdapter = GuideRowsAdapter(
+            hourWidthPx = resources.getDimensionPixelSize(R.dimen.epg_hour_width),
+            onProgramClick = { position -> onGuideChannelClick(position) },
+            onOffsetChanged = {
+                positionNowLine()
+                timeRuler.setOffset(guideRowsAdapter.currentOffset())
+            },
+        )
+        programsList.layoutManager = LinearLayoutManager(this)
+        programsList.adapter = guideRowsAdapter
+        val timelineTouch = TimelineTouchListener()
+        programsList.addOnItemTouchListener(timelineTouch)
+        // The scale belongs to the grid, so dragging it scrolls the grid.
+        timeRuler.setOnTouchListener(timelineTouch)
+
+        // The channel column and the program grid hold the same rows, so they have to share one
+        // vertical position: otherwise a channel ends up next to somebody else's programs.
+        guideChannelsList.addOnScrollListener(object : RecyclerView.OnScrollListener() {
+            override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
+                syncVerticalScroll(guideChannelsList, programsList)
+            }
+        })
+        programsList.addOnScrollListener(object : RecyclerView.OnScrollListener() {
+            override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
+                syncVerticalScroll(programsList, guideChannelsList)
+            }
+        })
+
+        dayStart = Fmt.startOfDay(System.currentTimeMillis())
+        timeRuler.setDayStart(dayStart)
+        daysAdapter.submit(dayStart)
+        applyHighlighting()
 
         maybeAutoUpdate()
 
@@ -106,6 +175,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        pendingFocus = true
         reload(autoPlay = firstResume && prefs.turnOnLastChannel)
         firstResume = false
     }
@@ -113,6 +183,7 @@ class MainActivity : AppCompatActivity() {
     override fun onDestroy() {
         super.onDestroy()
         executor.shutdownNow()
+        guideExecutor.shutdownNow()
         main.removeCallbacksAndMessages(null)
         playerLaunched = false
     }
@@ -121,7 +192,13 @@ class MainActivity : AppCompatActivity() {
 
     private fun bindViews() {
         groupsList = findViewById(R.id.groups_list)
-        channelsList = findViewById(R.id.channels_list)
+        guideChannelsList = findViewById(R.id.guide_channels_list)
+        programsList = findViewById(R.id.programs_rows)
+        daysList = findViewById(R.id.days_list)
+        menuStrip = findViewById(R.id.menu_strip)
+        gridContainer = findViewById(R.id.grid_container)
+        timeRuler = findViewById(R.id.time_ruler)
+        nowLine = findViewById(R.id.now_line)
         emptyView = findViewById(R.id.empty_view)
         statusText = findViewById(R.id.status_text)
         clockView = findViewById(R.id.clock)
@@ -130,24 +207,27 @@ class MainActivity : AppCompatActivity() {
         subtitleView = findViewById(R.id.subtitle)
     }
 
-    private fun buildNavButtons() {
-        val container = findViewById<LinearLayout>(R.id.nav_buttons)
-        container.removeAllViews()
+    private fun buildMenuStrip() {
+        menuStrip.removeAllViews()
         val buttons = buildList {
-            if (prefs.showGuideButton) add(NavButton(R.drawable.ic_guide, R.string.nav_guide) { openGuide() })
             add(NavButton(R.drawable.ic_search, R.string.search) { openSearch() })
             add(NavButton(R.drawable.ic_star, R.string.nav_favorites) { selectCategoryByFilter(ChannelFilter.FAVORITES) })
             if (prefs.showHistoryButton) add(NavButton(R.drawable.ic_history, R.string.nav_history) { openHistory() })
             add(NavButton(R.drawable.ic_movie, R.string.nav_movies) { openVod() })
             add(NavButton(R.drawable.ic_settings, R.string.nav_settings) { openSettings() })
         }
-        buttons.forEach { button -> container.addView(createNavView(button)) }
+        buttons.forEach { button -> menuStrip.addView(createNavView(button)) }
+    }
+
+    private fun applyHighlighting() {
+        guideChannelsAdapter.setHighlightCurrent(prefs.highlightCurrentChannel)
+        guideRowsAdapter.setHighlightCurrent(prefs.highlightCurrentPrograms)
     }
 
     private data class NavButton(val icon: Int, val label: Int, val action: () -> Unit)
 
     private fun createNavView(button: NavButton): View {
-        val view = LayoutInflater.from(this).inflate(R.layout.item_nav, findViewById(R.id.nav_buttons), false)
+        val view = LayoutInflater.from(this).inflate(R.layout.item_nav_vertical, menuStrip, false)
         view.findViewById<android.widget.ImageView>(R.id.nav_icon).setImageResource(button.icon)
         view.findViewById<TextView>(R.id.nav_label).setText(button.label)
         view.setOnClickListener { button.action() }
@@ -170,8 +250,7 @@ class MainActivity : AppCompatActivity() {
         clockDateView.visible(prefs.showClock && prefs.showDate)
         clockView.text = clockFormat.format(Date(now))
         clockDateView.text = dateFormat.format(Date(now))
-        channelAdapter.setNow(now)
-        updateProgress()
+        positionNowLine()
     }
 
     // ----------------------------------------------------------------- data
@@ -186,7 +265,7 @@ class MainActivity : AppCompatActivity() {
             main.post {
                 categories = list
                 groupsAdapter.submit(list, selectedIndex)
-                channelAdapter.setLastPlayed(lastPlayed)
+                guideChannelsAdapter.setCurrent(lastPlayed)
                 if (list.isNotEmpty()) {
                     onCategorySelected(groupsAdapter.selectedIndex(), force = true)
                 } else {
@@ -208,16 +287,9 @@ class MainActivity : AppCompatActivity() {
                 ChannelFilter.HISTORY -> repo.historyChannels(prefs.recentChannelCount)
                 else -> repo.channels(category.playlistIds, category.group, category.filter, sort)
             }
-            val programs = if (prefs.showCurrentPrograms && channels.isNotEmpty()) {
-                repo.programsMapFor(channels.map { it.id }, System.currentTimeMillis())
-            } else {
-                emptyMap()
-            }
             main.post {
                 currentChannels = channels
-                channelAdapter.setLocale(Locale.getDefault())
-                channelAdapter.submit(channels)
-                channelAdapter.setPrograms(programs)
+                guideChannelsAdapter.submit(channels)
                 if (channels.isEmpty()) {
                     showEmpty(if (categories.size == 1) getString(R.string.no_channels) else getString(R.string.there_is_no_channel_in_group))
                 } else {
@@ -228,8 +300,122 @@ class MainActivity : AppCompatActivity() {
                     pendingAutoPlay = false
                     autoPlayLastChannel()
                 }
+                loadGuidePrograms(index)
+                if (pendingFocus) {
+                    pendingFocus = false
+                    focusGuide()
+                }
             }
         }
+    }
+
+    private fun loadGuidePrograms(categoryIndex: Int) {
+        val channels = currentChannels
+        val loadId = ++guideLoadId
+        if (channels.isEmpty()) {
+            guidePrograms = emptyMap()
+            guideRowsAdapter.setData(emptyList(), emptyMap())
+            nowLine.visible(false)
+            return
+        }
+        val key = "$categoryIndex:$dayIndex"
+        guideCache[key]?.let { cached ->
+            guidePrograms = cached
+            applyGuideData(channels, cached)
+            return
+        }
+        guideExecutor.execute {
+            val from = dayStart
+            val map = repo.programsForChannels(
+                channels.map { it.id },
+                from,
+                from + GuideDaysAdapter.DAY_MS,
+            )
+            main.post {
+                if (loadId != guideLoadId) return@post
+                guideCache[key] = map
+                guidePrograms = map
+                applyGuideData(channels, map)
+            }
+        }
+    }
+
+    /**
+     * The rows of the grid are built during layout, so the timeline can only be positioned
+     * once the rows exist - before that every horizontal scroll is a no-op.
+     */
+    private fun applyGuideData(channels: List<Channel>, programs: Map<Long, List<Program>>) {
+        guideRowsAdapter.setData(channels, programs)
+        programsList.doOnPreDraw { scrollTimelineToNow() }
+    }
+
+    private fun selectDay(index: Int) {
+        val target = index.coerceIn(0, GUIDE_DAYS - 1)
+        if (target == dayIndex) return
+        dayIndex = target
+        dayStart = Fmt.startOfDay(System.currentTimeMillis()) + target * GuideDaysAdapter.DAY_MS
+        daysAdapter.select(target)
+        guideRowsAdapter.setDayStart(dayStart)
+        timeRuler.setDayStart(dayStart)
+        loadGuidePrograms(groupsAdapter.selectedIndex())
+    }
+
+    private fun scrollTimelineToNow() {
+        val now = System.currentTimeMillis()
+        guideRowsAdapter.setViewport(programsList.width)
+        if (now !in dayStart until dayStart + GuideDaysAdapter.DAY_MS) {
+            guideRowsAdapter.setOffset(0)
+            return
+        }
+        // Keep "now" a little inside the viewport, otherwise the marker ends up flush
+        // against the divider on the left and reads as missing.
+        val margin = (gridContainer.width * NOW_LINE_MARGIN).toInt()
+        guideRowsAdapter.setOffset(guideRowsAdapter.pixelForTime(now) - margin)
+    }
+
+    private fun positionNowLine() {
+        val now = System.currentTimeMillis()
+        // The scale carries its own marker so the current time stays readable there too.
+        timeRuler.setNow(now)
+        if (!prefs.showCurrentTimeIndicator) {
+            nowLine.visible(false)
+            return
+        }
+        if (now < dayStart || now > dayStart + GuideDaysAdapter.DAY_MS) {
+            nowLine.visible(false)
+            return
+        }
+        val x = guideRowsAdapter.pixelForTime(now) - guideRowsAdapter.currentOffset()
+        // "Now" can legitimately be scrolled out of sight. Hiding the marker beats leaving a
+        // stray line glued to the edge, which reads as a rendering bug.
+        if (x < 0 || x > gridContainer.width) {
+            nowLine.visible(false)
+            return
+        }
+        nowLine.visible(true)
+        nowLine.translationX = x.toFloat()
+    }
+
+    /**
+     * Mirrors the vertical position of [source] onto [target]. Both lists use the same layout
+     * manager and the same item height, so the first visible row and its offset fully describe
+     * the position. The applied position is remembered, which keeps the two scroll listeners
+     * from bouncing the same change back and forth.
+     */
+    private fun syncVerticalScroll(source: RecyclerView, target: RecyclerView) {
+        if (syncingRows) return
+        val sourceLm = source.layoutManager as? LinearLayoutManager ?: return
+        val targetLm = target.layoutManager as? LinearLayoutManager ?: return
+        val first = sourceLm.findFirstVisibleItemPosition()
+        if (first == RecyclerView.NO_POSITION) return
+        val view = source.findViewHolderForAdapterPosition(first)?.itemView ?: return
+        val top = view.top
+        if (first == lastSyncPosition && top == lastSyncTop) return
+        lastSyncPosition = first
+        lastSyncTop = top
+        syncingRows = true
+        targetLm.scrollToPositionWithOffset(first, top)
+        syncingRows = false
     }
 
     private fun prefsFor(category: Category): String = when (prefs.channelsSorting) {
@@ -256,34 +442,10 @@ class MainActivity : AppCompatActivity() {
         emptyView.visible(true)
     }
 
-    private fun spanCount(): Int {
-        val width = resources.displayMetrics.widthPixels
-        val card = resources.getDimensionPixelSize(R.dimen.card_size) + 8
-        return (width / card).coerceAtLeast(3)
-    }
-
-    private fun updateProgress() {
-        val visibleIds = currentChannels.take(60).map { it.id }
-        if (visibleIds.isEmpty() || !prefs.showCurrentPrograms) return
-        // EPG does not change every second, a DB round trip per tick is wasteful
-        val now = System.currentTimeMillis()
-        if (now - lastProgressLoad < 15_000L) return
-        lastProgressLoad = now
-        executor.execute {
-            val programs = repo.programsMapFor(visibleIds, now)
-            main.post {
-                if (prefs.showCurrentPrograms) {
-                    channelAdapter.setPrograms(programs)
-                }
-            }
-        }
-    }
-
     // ---------------------------------------------------------------- events
 
-    private fun onChannelClick(index: Int) {
-        val channel = currentChannels.getOrNull(index)
-        if (channel == null) return
+    private fun onGuideChannelClick(position: Int) {
+        val channel = currentChannels.getOrNull(position) ?: return
         openPlayerFor(channel, currentChannels)
     }
 
@@ -330,6 +492,7 @@ class MainActivity : AppCompatActivity() {
         val channel = currentChannels.getOrNull(index) ?: return
         val options = listOf(
             Dialogs.Item(getString(R.string.watch_channel)),
+            Dialogs.Item(getString(R.string.programs)),
             Dialogs.Item(
                 if (channel.favorite) getString(R.string.remove_from_favorites)
                 else getString(R.string.add_to_favorites)
@@ -345,16 +508,30 @@ class MainActivity : AppCompatActivity() {
         Dialogs.show(this, channel.name, null, options) { which ->
             when (which) {
                 0 -> play(channel)
-                1 -> toggleFavorite(channel)
-                2 -> repo.setChannelFlags(channel.id, hidden = true)
-                3 -> repo.setChannelFlags(channel.id, blocked = !channel.blocked)
-                4 -> showSorting()
-                5 -> {
+                1 -> showProgramMenu(index)
+                2 -> toggleFavorite(channel)
+                3 -> repo.setChannelFlags(channel.id, hidden = true)
+                4 -> repo.setChannelFlags(channel.id, blocked = !channel.blocked)
+                5 -> showSorting()
+                6 -> {
                     repo.removeHistory(channel.id)
                     toast(getString(R.string.remove_from_history))
                 }
             }
             reload()
+        }
+    }
+
+    private fun showProgramMenu(channelIndex: Int) {
+        val channel = currentChannels.getOrNull(channelIndex) ?: return
+        val list = guidePrograms[channel.id].orEmpty()
+        if (list.isEmpty()) {
+            toast(getString(R.string.no_programs))
+            return
+        }
+        val options = list.map { Dialogs.Item(it.title, Fmt.timeRange(it.start, it.stop, Locale.getDefault())) }
+        Dialogs.show(this, channel.name, getString(R.string.programs), options) { which ->
+            play(channel)
         }
     }
 
@@ -495,8 +672,227 @@ class MainActivity : AppCompatActivity() {
 
     // ------------------------------------------------------------ navigation
 
-    private fun openGuide() {
-        startActivity(Intent(this, TvGuideActivity::class.java))
+    /**
+     * Left arrow peels the window open one column at a time: first the channel groups,
+     * then the menu strip that used to sit horizontally in the top bar. Right arrow and
+     * Back put the columns away again, one per press.
+     */
+    private fun openLeftColumn() {
+        when (leftStage) {
+            STAGE_CONTENT -> {
+                leftStage = STAGE_GROUPS
+                groupsList.visible(true)
+                focusList(groupsList, groupsAdapter.selectedIndex())
+            }
+            STAGE_GROUPS -> {
+                leftStage = STAGE_MENU
+                menuStrip.visible(true)
+                focusFirst(menuStrip)
+            }
+        }
+    }
+
+    private fun closeLeftColumn() {
+        when (leftStage) {
+            STAGE_MENU -> {
+                leftStage = STAGE_GROUPS
+                menuStrip.visible(false)
+                focusList(groupsList, groupsAdapter.selectedIndex())
+            }
+            STAGE_GROUPS -> {
+                leftStage = STAGE_CONTENT
+                groupsList.visible(false)
+                focusList(guideChannelsList)
+            }
+        }
+    }
+
+    private fun focusFirst(container: ViewGroup) {
+        val child = (0 until container.childCount)
+            .map { container.getChildAt(it) }
+            .firstOrNull { it.isFocusable }
+        if (child != null) {
+            child.requestFocus()
+            return
+        }
+        container.postDelayed({
+            if (!container.hasFocus()) focusFirst(container)
+        }, FOCUS_RETRY_MS)
+    }
+
+    private fun focusList(list: RecyclerView, position: Int = 0) {
+        val target = position.coerceAtLeast(0)
+        list.scrollToPosition(target)
+        focusList(list, target, FOCUS_ATTEMPTS)
+    }
+
+    private fun focusList(list: RecyclerView, position: Int, attempts: Int) {
+        if (attempts <= 0) return
+        val child = list.findViewHolderForAdapterPosition(position)?.itemView
+            ?: list.getChildAt(0)
+        if (child != null) {
+            child.requestFocus()
+            if (child.hasFocus()) return
+        }
+        list.postDelayed({ focusList(list, position, attempts - 1) }, FOCUS_RETRY_MS)
+    }
+
+    private fun focusGuide() {
+        if (currentChannels.isEmpty()) {
+            focusFirst(daysList)
+            return
+        }
+        val index = currentChannels.indexOfFirst { it.id == guideChannelsAdapter.currentId() }
+        focusList(guideChannelsList, if (index >= 0) index else 0)
+    }
+
+    private fun scrollTimeline(hours: Int) {
+        guideRowsAdapter.setViewport(programsList.width)
+        guideRowsAdapter.setOffset(
+            guideRowsAdapter.currentOffset() + hours * guideRowsAdapter.hourWidthPx()
+        )
+    }
+
+    /**
+     * Moves the grid along the time axis: positive [pixels] goes towards later programmes, which
+     * is the same direction the content travels when it is dragged to the left.
+     */
+    private fun advanceTimelineBy(pixels: Int) {
+        // Keep the clamp based on the current width, otherwise a stale viewport lets the grid run
+        // past its content and the rows scroll into empty space.
+        guideRowsAdapter.setViewport(programsList.width)
+        guideRowsAdapter.setOffset(guideRowsAdapter.currentOffset() + pixels)
+    }
+
+    /**
+     * Pulls the grid back to the closest window that has something to show. Sparse EPG leaves long
+     * empty stretches, and a fling used to be able to come to rest inside one of them.
+     */
+    private fun settleTimeline() {
+        guideRowsAdapter.setViewport(programsList.width)
+        val from = guideRowsAdapter.currentOffset()
+        val target = guideRowsAdapter.nearestPopulatedOffset() ?: return
+        ValueAnimator.ofInt(from, target).apply {
+            duration = (220L * kotlin.math.abs(target - from) / programsList.width).toLong()
+                .coerceIn(140L, 320L)
+            addUpdateListener { guideRowsAdapter.setOffset(it.animatedValue as Int) }
+            start()
+        }
+    }
+
+    private var flingVelocity = 0f
+
+    private fun flingTimeline(velocityX: Float) {
+        flingVelocity = velocityX
+        if (kotlin.math.abs(flingVelocity) < MIN_FLING_PX_PER_SEC) {
+            flingVelocity = 0f
+            settleTimeline()
+            return
+        }
+        Choreographer.getInstance().postFrameCallback(flingStep)
+    }
+
+    private val flingStep = object : Choreographer.FrameCallback {
+        override fun doFrame(frameTimeNanos: Long) {
+            if (flingVelocity == 0f) return
+            val before = guideRowsAdapter.currentOffset()
+            advanceTimelineBy(flingVelocity.toInt())
+            flingVelocity *= FLING_DECAY
+            val stuck = guideRowsAdapter.currentOffset() == before
+            if (stuck || kotlin.math.abs(flingVelocity) < MIN_FLING_PX_PER_SEC) {
+                flingVelocity = 0f
+                settleTimeline()
+                return
+            }
+            Choreographer.getInstance().postFrameCallback(this)
+        }
+    }
+
+    /**
+     * Turns a horizontal drag over the grid into a shared offset. Vertical drags are left to the
+     * channel list, so a diagonal gesture still scrolls channels.
+     */
+    private inner class TimelineTouchListener :
+        RecyclerView.OnItemTouchListener,
+        View.OnTouchListener {
+        private val slop = ViewConfiguration.get(this@MainActivity).scaledTouchSlop
+        private var downX = 0f
+        private var downY = 0f
+        private var lastX = 0f
+        private var dragging = false
+        private var tracker: VelocityTracker? = null
+
+        /**
+         * Shared by both callbacks: depending on where the gesture is picked up the following
+         * events are delivered to one or the other, and a repeated event is a no-op because
+         * [lastX] has already moved past it.
+         */
+        private fun handle(e: MotionEvent): Boolean {
+            when (e.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    downX = e.x
+                    downY = e.y
+                    lastX = e.x
+                    dragging = false
+                    tracker?.recycle()
+                    tracker = VelocityTracker.obtain().also { it.addMovement(e) }
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    tracker?.addMovement(e)
+                    val dx = e.x - downX
+                    val dy = e.y - downY
+                    if (!dragging &&
+                        kotlin.math.abs(dx) > slop &&
+                        kotlin.math.abs(dx) > kotlin.math.abs(dy)
+                    ) {
+                        dragging = true
+                        // Hand the slop already eaten by the interception to the grid, so the
+                        // content does not jump when the drag is picked up.
+                        lastX = downX + if (dx < 0) -slop else slop
+                        flingVelocity = 0f
+                    }
+                    if (dragging) {
+                        val step = (e.x - lastX).toInt()
+                        if (step != 0) {
+                            lastX = e.x
+                            advanceTimelineBy(-step)
+                        }
+                    }
+                }
+                MotionEvent.ACTION_UP -> {
+                    tracker?.addMovement(e)
+                    tracker?.computeCurrentVelocity(1000)
+                    // The content follows the finger, so a leftwards fling runs time forwards.
+                    if (dragging) flingTimeline(-(tracker?.xVelocity ?: 0f))
+                    releaseTracker()
+                }
+                MotionEvent.ACTION_CANCEL -> releaseTracker()
+            }
+            return dragging
+        }
+
+        override fun onInterceptTouchEvent(rv: RecyclerView, e: MotionEvent): Boolean = handle(e)
+
+        override fun onTouchEvent(rv: RecyclerView, e: MotionEvent) {
+            handle(e)
+        }
+
+        override fun onRequestDisallowInterceptTouchEvent(disallowIntercept: Boolean) = Unit
+
+        /**
+         * The scale has no interaction of its own, so it takes the whole gesture and feeds it to
+         * the same state machine the grid uses.
+         */
+        override fun onTouch(view: View, e: MotionEvent): Boolean {
+            handle(e)
+            return true
+        }
+
+        private fun releaseTracker() {
+            tracker?.recycle()
+            tracker = null
+            dragging = false
+        }
     }
 
     private fun openSearch() {
@@ -560,10 +956,44 @@ class MainActivity : AppCompatActivity() {
                 return true
             }
             KeyEvent.KEYCODE_GUIDE -> {
-                openGuide()
+                leftStage = STAGE_CONTENT
+                menuStrip.visible(false)
+                groupsList.visible(false)
+                focusGuide()
                 return true
             }
+            KeyEvent.KEYCODE_DPAD_LEFT -> {
+                if (daysList.hasFocus()) {
+                    selectDay(daysAdapter.selectedIndex() - 1)
+                    return true
+                }
+                if (leftStage == STAGE_MENU) return true
+                openLeftColumn()
+                return true
+            }
+            KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                if (daysList.hasFocus()) {
+                    selectDay(daysAdapter.selectedIndex() + 1)
+                    return true
+                }
+                if (leftStage != STAGE_CONTENT) {
+                    closeLeftColumn()
+                    return true
+                }
+                scrollTimeline(TIMELINE_STEP_HOURS)
+                return true
+            }
+            KeyEvent.KEYCODE_DPAD_UP -> {
+                if (leftStage == STAGE_CONTENT && !daysList.hasFocus()) {
+                    scrollTimeline(-TIMELINE_STEP_HOURS)
+                    return true
+                }
+            }
             KeyEvent.KEYCODE_BACK -> {
+                if (leftStage != STAGE_CONTENT) {
+                    closeLeftColumn()
+                    return true
+                }
                 if (prefs.confirmExit) {
                     val now = System.currentTimeMillis()
                     if (now - lastExitPress < 2000) {
@@ -580,6 +1010,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onBackPressed() {
+        if (leftStage != STAGE_CONTENT) {
+            closeLeftColumn()
+            return
+        }
         if (prefs.confirmExit) {
             val now = System.currentTimeMillis()
             if (now - lastExitPress < 2000) {
@@ -601,5 +1035,16 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
         const val REQUEST_ADD_PLAYLIST = 501
+        private const val GUIDE_DAYS = 7
+        private const val GUIDE_CACHE_MAX = 6
+        private const val STAGE_CONTENT = 0
+        private const val STAGE_GROUPS = 1
+        private const val STAGE_MENU = 2
+        private const val TIMELINE_STEP_HOURS = 2
+        private const val NOW_LINE_MARGIN = 0.12f
+        private const val MIN_FLING_PX_PER_SEC = 350f
+        private const val FLING_DECAY = 0.95f
+        private const val FOCUS_ATTEMPTS = 5
+        private const val FOCUS_RETRY_MS = 60L
     }
 }

@@ -381,7 +381,6 @@ class SettingsActivity : AppCompatActivity() {
             add(switchItem(R.string.show_all_playlists_category) { prefs.showAllPlaylistsCategory })
             add(switchItem(R.string.show_favorites_category) { prefs.showFavoritesCategory })
             add(switchItem(R.string.show_history_button) { prefs.showHistoryButton })
-            add(switchItem(R.string.show_tv_guide_button) { prefs.showGuideButton })
             add(SettingItem.Header(getString(R.string.markers)))
             add(switchItem(R.string.highlight_current_channel) { prefs.highlightCurrentChannel })
             add(switchItem(R.string.highlight_current_programs) { prefs.highlightCurrentPrograms })
@@ -544,7 +543,6 @@ class SettingsActivity : AppCompatActivity() {
             R.string.show_all_playlists_category -> prefs.showAllPlaylistsCategory = value
             R.string.show_favorites_category -> prefs.showFavoritesCategory = value
             R.string.show_history_button -> prefs.showHistoryButton = value
-            R.string.show_tv_guide_button -> prefs.showGuideButton = value
             R.string.highlight_current_channel -> prefs.highlightCurrentChannel = value
             R.string.highlight_current_programs -> prefs.highlightCurrentPrograms = value
             R.string.highlight_progress_only -> prefs.highlightProgressOnly = value
