@@ -511,11 +511,13 @@ captureFontScale(switchAudioCodec) { prefs.bottomPanelFont }
                 repo.addHistory(ch.id, 0)
                 val index = channelIds.indexOfFirst { it == ch.id }
                 if (index >= 0) currentIndex = index
-                if (!resumeRunningStream(ch)) {
-                    prepareEngine(ch, pl, fromStart)
-                }
+                // A stream that is taken over as it is will not report ready again, so the buffering
+                // indicator of the switch would stay on top of a picture that is already running
+                // until its timeout expires.
+                val resumed = resumeRunningStream(ch)
+                if (resumed) clearBuffering.run() else prepareEngine(ch, pl, fromStart)
                 updateOsd()
-                showSwitchPanel()
+                showSwitchPanel(armBuffering = !resumed)
                 isSwitching = false
             }
         }
@@ -529,7 +531,12 @@ captureFontScale(switchAudioCodec) { prefs.bottomPanelFont }
     private fun resumeRunningStream(ch: Channel): Boolean {
         val current = Playback.engine() ?: return false
         if (!Playback.active() || Playback.channelId() != ch.id) return false
-        if (current.positionMs() <= 0L && current.durationMs() <= 0L) return false
+        // A live stream reports no position and no duration, so those two say nothing about a
+        // running picture. Whether it is actually playing is what tells a live engine from one that
+        // was left behind, and only that engine is worth taking over.
+        val running = current.positionMs() > 0L || current.durationMs() > 0L ||
+            runCatching { current.isPlaying() }.getOrDefault(false)
+        if (!running) return false
         engine = current
         Playback.attachToPlayer(engineHolder)
         Playback.markChannel(ch.id, ch.name)

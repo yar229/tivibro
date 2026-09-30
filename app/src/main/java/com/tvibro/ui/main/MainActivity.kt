@@ -619,11 +619,38 @@ class MainActivity : AppCompatActivity() {
         if (engine == null) {
             guideInfoPlayer.removeAllViews()
             guideInfoPlaceholder.visible(true)
+            guideInfoPlayer.setOnClickListener(null)
             return
         }
         guideInfoPlaceholder.visible(false)
         Playback.attachTo(guideInfoPlayer)
         Playback.play()
+        guideInfoPlayer.setOnClickListener { expandMiniPlayer() }
+    }
+
+    /**
+     * A tap on the picture of the mini player is the way back into the full screen player. The
+     * channel that is running is handed over, and the player takes the live engine over instead of
+     * opening the stream again, so the picture continues at the position it had reached.
+     */
+    private fun expandMiniPlayer() {
+        val id = Playback.channelId()
+        if (id <= 0L) return
+        val index = currentChannels.indexOfFirst { it.id == id }
+        if (index >= 0) {
+            play(currentChannels[index], currentChannels)
+            return
+        }
+        // The stream belongs to another category, so the list of the guide cannot describe it: the
+        // player gets the id alone and looks the channel up on its own.
+        startActivity(
+            Intent(this, PlayerActivity::class.java)
+                .putExtra(PlayerActivity.EXTRA_CHANNEL_ID, id)
+                .putExtra(PlayerActivity.EXTRA_CHANNEL_IDS, longArrayOf(id))
+                .putExtra(PlayerActivity.EXTRA_CHANNEL_INDEX, 0)
+                .putExtra(PlayerActivity.EXTRA_STAY_ON_LIST, prefs.stayOnList)
+                .putExtra(PlayerActivity.EXTRA_CATEGORY_INDEX, groupsAdapter.selectedIndex())
+        )
     }
 
     /** Pick first, then the focused cell, then the focused row, then the highlighted channel. */
