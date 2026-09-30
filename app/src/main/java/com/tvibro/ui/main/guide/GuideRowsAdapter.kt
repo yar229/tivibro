@@ -132,24 +132,60 @@ class GuideRowsAdapter(
 
     fun hasCellAbove(): Boolean = hasCellInDirection(-1)
 
-    private fun hasCellInDirection(step: Int): Boolean {
+    /**
+     * Row a vertical step lands on: the nearest one in that direction that carries a programme, which
+     * is the row the focus search enters. Rows without anything on the axis are stepped over, and
+     * [RecyclerView.NO_POSITION] is returned at the real end of the list.
+     */
+    fun nextChannelPosition(step: Int): Int {
         val row = focusedChannel
-        if (row == RecyclerView.NO_POSITION) return false
-        val end = dayStart + GuideDaysAdapter.DAY_MS
-        var position = row + step
+        if (row == RecyclerView.NO_POSITION) return RecyclerView.NO_POSITION
+        return channelPositionIn(step, row + step)
+    }
+
+    /**
+     * Nearest row that carries a cell, starting at [from] and walking in [step]. A row without
+     * anything on the axis is stepped over, exactly like the focus search steps over it.
+     */
+    fun channelPositionIn(step: Int, from: Int): Int {
+        var position = from
         while (position in channels.indices) {
-            val channel = channels[position]
-            // The same rule the rows are filled with, so an empty row is not counted in.
-            if (programs[channel.id].orEmpty().any { program ->
-                    program.stop > dayStart && program.start < end &&
-                        pixelForTime(program.stop) > 0 && pixelForTime(program.start) < dayWidth
-                }
-            ) {
-                return true
-            }
+            if (hasAnyCell(position)) return position
             position += step
         }
-        return false
+        return RecyclerView.NO_POSITION
+    }
+
+    /** False while the crosshair is not on any cell, e.g. after the focus left the grid. */
+    fun hasCrosshair(): Boolean = focusedChannel != RecyclerView.NO_POSITION
+
+    /** Programme of a row that is on air at [time], or null when that row carries nothing there. */
+    fun programOnAirAt(channelPosition: Int, time: Long): Program? {
+        val channel = channels.getOrNull(channelPosition) ?: return null
+        return programs[channel.id].orEmpty().firstOrNull { time in it.start until it.stop }
+    }
+
+    /** First programme of a row that lies on the axis, or null when the row is empty. */
+    fun firstProgramAt(channelPosition: Int): Program? {
+        val channel = channels.getOrNull(channelPosition) ?: return null
+        val end = dayStart + GuideDaysAdapter.DAY_MS
+        return programs[channel.id].orEmpty().firstOrNull { program ->
+            program.stop > dayStart && program.start < end &&
+                pixelForTime(program.stop) > 0 && pixelForTime(program.start) < dayWidth
+        }
+    }
+
+    private fun hasCellInDirection(step: Int): Boolean =
+        nextChannelPosition(step) != RecyclerView.NO_POSITION
+
+    /** True while the row carries at least one programme of the day that is on the axis. */
+    private fun hasAnyCell(position: Int): Boolean {
+        val channel = channels.getOrNull(position) ?: return false
+        val end = dayStart + GuideDaysAdapter.DAY_MS
+        return programs[channel.id].orEmpty().any { program ->
+            program.stop > dayStart && program.start < end &&
+                pixelForTime(program.stop) > 0 && pixelForTime(program.start) < dayWidth
+        }
     }
 
     /**

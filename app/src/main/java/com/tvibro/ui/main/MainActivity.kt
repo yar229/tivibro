@@ -1087,6 +1087,64 @@ class MainActivity : AppCompatActivity() {
         main.postDelayed({ applyPendingFocus(attempts - 1) }, FOCUS_RETRY_MS)
     }
 
+    /**
+     * One vertical step of the crosshair. True when the key is answered here, false when the step is
+     * left to the ordinary focus search.
+     *
+     * The now line already points at what is on air, so stepping along it is the shorter move: while
+     * the crosshair sits on a cell the line crosses, the row above or below is entered at its own
+     * now cell instead of at the one nearest in pixels - a wide cell reaches far to both sides, and
+     * the horizontal distance to its centre easily favours a programme that has already ended.
+     *
+     * Answering the key matters as much as the target: the focus search runs while the event is
+     * still being dispatched, so a step that only moves the crosshair and then lets the search run
+     * as well walks two rows and skips the one in between.
+     */
+    private fun stepCrosshair(step: Int): Boolean {
+        val program = guideRowsAdapter.focusedProgram()
+        if (program == null) {
+            // The focus search can walk out of the grid when there is no cell left in that
+            // direction, and a grid without a crosshair has no way back: the step puts it on the
+            // nearest row that does carry a cell instead of doing nothing at all.
+            return recoverCrosshair(step)
+        }
+        val now = System.currentTimeMillis()
+        if (now < program.start || now >= program.stop) return false
+        val row = guideRowsAdapter.nextChannelPosition(step)
+        val onAir = guideRowsAdapter.programOnAirAt(row, now) ?: return false
+        return focusGuideCell(row, onAir)
+    }
+
+    /** Puts a lost crosshair back on the nearest row above or below that carries a cell. */
+    private fun recoverCrosshair(step: Int): Boolean {
+        val first = (programsList.layoutManager as? LinearLayoutManager)
+            ?.findFirstVisibleItemPosition() ?: RecyclerView.NO_POSITION
+        if (first == RecyclerView.NO_POSITION) return false
+        val row = if (step < 0) {
+            guideRowsAdapter.channelPositionIn(-1, first - 1)
+        } else {
+            guideRowsAdapter.channelPositionIn(1, first)
+        }
+        if (row == RecyclerView.NO_POSITION) return false
+        val target = guideRowsAdapter.firstProgramAt(row) ?: return false
+        return focusGuideCell(row, target)
+    }
+
+    /**
+     * Scrolls the row of a step into view and keeps asking for the cell until it reports the focus.
+     * The next row of a step is regularly still outside the viewport, and a row that is not attached
+     * is not built either - asking once simply failed then, and the step was handed back to the focus
+     * search, which walked on to whatever cell happened to be on screen. That is what made the
+     * crosshair skip a channel on the way down, while the same step upwards usually landed right.
+     */
+    private fun focusGuideCell(channelPosition: Int, program: Program): Boolean {
+        programsList.scrollToPosition(channelPosition)
+        focusTargetChannel = channelPosition
+        focusTargetProgram = program
+        applyPendingFocus(FOCUS_ATTEMPTS)
+        return true
+    }
+
     private fun scrollTimeline(hours: Int) {
         guideRowsAdapter.setViewport(programsList.width)
         guideRowsAdapter.setOffset(
@@ -1445,8 +1503,8 @@ class MainActivity : AppCompatActivity() {
                     // The grid scrolls like the channel column next to it: the crosshair walks on
                     // and both lists move together. Only the real end of the list stops it, so the
                     // focus can never wander off into the bars around the guide.
-                    if (!guideRowsAdapter.hasCellAbove()) return true
-                    return false
+                    if (guideRowsAdapter.hasCrosshair() && !guideRowsAdapter.hasCellAbove()) return true
+                    return !stepCrosshair(-1)
                 }
                 if (leftStage == STAGE_CONTENT && !daysList.hasFocus()) {
                     scrollTimeline(-TIMELINE_STEP_HOURS)
@@ -1454,7 +1512,10 @@ class MainActivity : AppCompatActivity() {
                 }
             }
             KeyEvent.KEYCODE_DPAD_DOWN -> {
-                if (programsList.hasFocus() && !guideRowsAdapter.hasCellBelow()) return true
+                if (programsList.hasFocus()) {
+                    if (guideRowsAdapter.hasCrosshair() && !guideRowsAdapter.hasCellBelow()) return true
+                    if (stepCrosshair(1)) return true
+                }
             }
             KeyEvent.KEYCODE_BACK -> {
                 if (leftStage != STAGE_CONTENT) {
