@@ -746,6 +746,12 @@ class MainActivity : AppCompatActivity() {
      * A tap on a cell only marks the programme, a second activation of the same cell plays it.
      * That keeps a plain tap from throwing the user into the player while still allowing a single
      * pick to be read and confirmed.
+     *
+     * The pick deliberately stays out of the input focus. Handing it to the crosshair made the grid
+     * scroll the row into view under the finger that is still resting on it, and that scroll cancels
+     * the gesture: the click never arrived, so the first tap only drew the crosshair, the second one
+     * only drew the pick, and only the third one started the channel. The pick is remembered on its
+     * own and the info panel follows it, so the remote is none the wiser and keeps its own steps.
      */
     private fun onGuideProgramClick(position: Int, program: Program) {
         if (guideRowsAdapter.isSelected(position, program)) {
@@ -753,7 +759,6 @@ class MainActivity : AppCompatActivity() {
             return
         }
         guideRowsAdapter.select(position, program)
-        guideRowsAdapter.requestFocusOnSelected()
     }
 
     private fun autoPlayLastChannel() {

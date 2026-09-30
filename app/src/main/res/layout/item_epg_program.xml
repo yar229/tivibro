@@ -1,12 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- focusableInTouchMode is deliberately absent: a cell that grabs the focus from the touch itself
+     would spend the first tap on the crosshair instead of the pick, and the scroll that comes with
+     the focus change cancels the gesture before the click reaches the handler. The adapter sets the
+     flag on a cell only when it asks for the focus itself. -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="@dimen/epg_hour_width"
     android:layout_height="match_parent"
     android:layout_margin="@dimen/epg_cell_margin"
     android:background="@drawable/bg_epg_cell"
-    android:focusable="true"
-    android:focusableInTouchMode="true">
+    android:focusable="true">
 
     <LinearLayout
         android:id="@+id/program_content"

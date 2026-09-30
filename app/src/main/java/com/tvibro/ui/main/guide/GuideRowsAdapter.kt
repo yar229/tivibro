@@ -106,8 +106,21 @@ class GuideRowsAdapter(
         onCellHighlighted(RecyclerView.NO_POSITION, null)
     }
 
+    /**
+     * One programme stands for one cell, even when the objects behind the grid are new ones: the
+     * schedule is parsed again on every refresh, and a second tap has to be recognised as the
+     * second tap on that very cell. Reference equality alone would lose the pick in between and
+     * cost the user another tap before the channel plays.
+     */
+    private fun sameProgram(first: Program?, second: Program?): Boolean = when {
+        first === second -> true
+        first == null || second == null -> false
+        first.id != 0L && first.id == second.id -> true
+        else -> first.start == second.start && first.stop == second.stop && first.title == second.title
+    }
+
     fun isSelected(channelPosition: Int, program: Program): Boolean =
-        channelPosition == selectedChannel && program === selectedCell
+        channelPosition == selectedChannel && sameProgram(selectedCell, program)
 
     fun selectedChannelPosition(): Int = selectedChannel
 
@@ -234,12 +247,6 @@ class GuideRowsAdapter(
             }
         }
         return false
-    }
-
-    /** Hands input focus to the selected cell. */
-    fun requestFocusOnSelected() {
-        val program = selectedCell ?: return
-        requestFocusOnCell(selectedChannel, program)
     }
 
     /** Restyles the cells of the attached rows after the pick, the crosshair or the clock changed. */
