@@ -15,10 +15,11 @@ import com.tvibro.TvBroApp
 import com.tvibro.base.toast
 import com.tvibro.data.Prefs
 import com.tvibro.data.model.EpgSource
+import com.tvibro.data.model.Playlist
+import com.tvibro.data.model.PlaylistType
 import com.tvibro.ui.common.Dialogs
 import com.tvibro.ui.common.PinGate
 import com.tvibro.ui.playlist.PlaylistWizardActivity
-import com.tvibro.ui.playlist.PlaylistsActivity
 import com.tvibro.work.EpgUpdateScheduler
 import java.io.File
 
@@ -38,6 +39,7 @@ class SettingsActivity : AppCompatActivity() {
     private var groups: List<SettingsGroup> = emptyList()
     private var openIndex = NO_GROUP
     private var closing = false
+    private var playlists: List<Playlist> = emptyList()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -52,6 +54,10 @@ class SettingsActivity : AppCompatActivity() {
         list = findViewById(R.id.settings_list)
 
         backButton.setOnClickListener { navigateBack() }
+        // The panel sits on top of the scrim, but the scrim is the one that closes the screen, so
+        // the panel has to swallow every touch that its own rows do not take. Otherwise a tap on
+        // its padding or on the text of a row that is not clickable falls through to the scrim.
+        panel.setOnClickListener { }
         scrim.setOnClickListener { close() }
         onBackPressedDispatcher.addCallback(this) { navigateBack() }
 
@@ -59,9 +65,34 @@ class SettingsActivity : AppCompatActivity() {
         groupAdapter = SettingsGroupAdapter { position -> openGroup(position) }
         list.layoutManager = LinearLayoutManager(this)
 
+        readPlaylists()
         rebuild()
         showRoot(focus = true)
         animateIn()
+    }
+
+    /**
+     * The wizard edits these rows behind this screen, so coming back from it is the moment to read
+     * them again. Only a real change rebuilds the list, and the row the user was on keeps focus.
+     */
+    override fun onResume() {
+        super.onResume()
+        readPlaylists()
+    }
+
+    private fun readPlaylists() {
+        val fresh = runCatching { TvBroApp.repo(this).playlists() }.getOrDefault(emptyList())
+        if (fresh == playlists) return
+        val changed = playlists.isNotEmpty() || fresh.isNotEmpty()
+        playlists = fresh
+        // A first read arrives after the screen is already on, and there is nothing to restore yet.
+        if (!changed || openIndex == NO_GROUP) {
+            rebuild()
+            return
+        }
+        val restore = focusedItemIndex()
+        rebuild()
+        restoreFocus(restore)
     }
 
     private fun animateIn() {
@@ -424,9 +455,20 @@ class SettingsActivity : AppCompatActivity() {
             add(SettingItem.Action(getString(R.string.add_playlist)) {
                 startActivity(android.content.Intent(this@SettingsActivity, PlaylistWizardActivity::class.java))
             })
-            add(SettingItem.Action(getString(R.string.edit_playlists)) {
-                startActivity(android.content.Intent(this@SettingsActivity, PlaylistsActivity::class.java))
-            })
+            if (playlists.isEmpty()) {
+                add(SettingItem.Header(getString(R.string.no_playlists)))
+            } else {
+                add(SettingItem.PlaylistHeader)
+                playlists.forEach { playlist ->
+                    add(SettingItem.PlaylistRow(
+                        title = playlist.name,
+                        type = getString(playlistTypeLabel(playlist.type)),
+                        url = playlist.url,
+                        onEdit = { PlaylistWizardActivity.startEdit(this@SettingsActivity, playlist.id) },
+                        onDelete = { confirmDeletePlaylist(playlist) },
+                    ))
+                }
+            }
             add(SettingItem.Action(getString(R.string.channel_names_editor)) { editChannelNames() })
             add(SettingItem.Action(getString(R.string.clear_logos_cache)) { clearLogos() })
         }
@@ -718,6 +760,49 @@ class SettingsActivity : AppCompatActivity() {
         ) {
             TvBroApp.repo(this).execSQL("UPDATE channels SET watch_time_ms = 0, last_watched = 0")
             toast(getString(R.string.watch_time_reset))
+        }
+    }
+
+    private fun playlistTypeLabel(type: PlaylistType): Int = when (type) {
+        PlaylistType.REMOTE_M3U -> R.string.m3u_playlist
+        PlaylistType.XTREAM -> R.string.xtream_codes
+        PlaylistType.STALKER -> R.string.stalker_portal
+        PlaylistType.FILE -> R.string.local_file
+    }
+
+    /**
+     * Deleting a playlist takes its channels and the EPG sources bound to it with it, so the
+     * question names the playlist and says so. The focus lands on the row that took its place.
+     */
+    private fun confirmDeletePlaylist(playlist: Playlist) {
+        Dialogs.confirm(
+            this,
+            getString(R.string.delete),
+            getString(R.string.confirm_delete_playlist, playlist.name),
+            getString(R.string.delete),
+        ) {
+            val position = focusedItemIndex()
+            TvBroApp.repo(this).deletePlaylist(playlist.id)
+            playlists = runCatching { TvBroApp.repo(this).playlists() }.getOrDefault(emptyList())
+            rebuild()
+            restoreFocus(position)
+        }
+    }
+
+    /** Adapter position of the row the focus is on, -1 when the focus is elsewhere. */
+    private fun focusedItemIndex(): Int {
+        if (openIndex == NO_GROUP) return -1
+        val holder = list.focusedChild?.let { list.getChildViewHolder(it) } ?: return -1
+        val position = holder.bindingAdapterPosition
+        return if (position == RecyclerView.NO_POSITION) -1 else position
+    }
+
+    private fun restoreFocus(index: Int) {
+        if (index < 0 || settingsAdapter.itemCount == 0) return
+        list.post {
+            val position = index.coerceAtMost(settingsAdapter.itemCount - 1)
+            list.findViewHolderForAdapterPosition(position)?.itemView?.requestFocus()
+                ?: list.requestFocus()
         }
     }
 

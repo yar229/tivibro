@@ -1,16 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- One playlist of the settings list. The column weights and the inner gaps repeat in
+     item_playlist_header.xml, so every value sits under the name of its column. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/playlist_row"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:background="@drawable/bg_dialog_item"
+    android:background="@drawable/bg_row"
     android:focusable="true"
     android:gravity="center_vertical"
     android:minHeight="@dimen/row_min_height"
+    android:nextFocusRight="@id/playlist_delete"
     android:orientation="horizontal"
-    android:paddingStart="@dimen/spacing_md"
-    android:paddingEnd="@dimen/spacing_md">
+    android:paddingStart="@dimen/spacing_lg"
+    android:paddingEnd="@dimen/spacing_lg">
 
     <TextView
         android:id="@+id/playlist_name"
@@ -24,7 +27,7 @@
 
     <TextView
         android:id="@+id/playlist_type"
-        style="@style/TvBro.Text.Subtitle"
+        style="@style/TvBro.Text.Time"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_marginStart="@dimen/spacing_md"
@@ -35,7 +38,7 @@
 
     <TextView
         android:id="@+id/playlist_url"
-        style="@style/TvBro.Text.Subtitle"
+        style="@style/TvBro.Text.Time"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_marginStart="@dimen/spacing_md"
@@ -47,12 +50,13 @@
     <LinearLayout
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:layout_weight="1.7"
+        android:layout_weight="1.2"
         android:gravity="end|center_vertical"
         android:orientation="horizontal">
 
+        <!-- The row itself opens the editor, the remote gets here with a right press. -->
         <TextView
-            android:id="@+id/playlist_edit"
+            android:id="@+id/playlist_delete"
             style="@style/TvBro.NavItemLabel"
             android:layout_width="wrap_content"
             android:layout_height="@dimen/touch_target"
@@ -62,23 +66,6 @@
             android:gravity="center"
             android:maxLines="1"
             android:nextFocusLeft="@id/playlist_row"
-            android:nextFocusRight="@id/playlist_delete"
-            android:paddingStart="@dimen/spacing_md"
-            android:paddingEnd="@dimen/spacing_md"
-            android:text="@string/edit" />
-
-        <TextView
-            android:id="@+id/playlist_delete"
-            style="@style/TvBro.NavItemLabel"
-            android:layout_width="wrap_content"
-            android:layout_height="@dimen/touch_target"
-            android:layout_marginStart="@dimen/spacing_sm"
-            android:background="@drawable/bg_group_item"
-            android:ellipsize="end"
-            android:focusable="true"
-            android:gravity="center"
-            android:maxLines="1"
-            android:nextFocusLeft="@id/playlist_edit"
             android:paddingStart="@dimen/spacing_md"
             android:paddingEnd="@dimen/spacing_md"
             android:text="@string/delete" />

@@ -116,14 +116,6 @@
             tools:ignore="DiscouragedApi,LockedOrientationActivity" />
 
         <activity
-            android:name=".ui.playlist.PlaylistsActivity"
-            android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenLayout|screenSize|smallestScreenSize|uiMode"
-            android:exported="false"
-            android:screenOrientation="landscape"
-            android:theme="@style/Theme.TvBro.Settings"
-            tools:ignore="DiscouragedApi,LockedOrientationActivity" />
-
-        <activity
             android:name=".ui.pin.PinActivity"
             android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenLayout|screenSize|smallestScreenSize|uiMode"
             android:exported="false"

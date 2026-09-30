@@ -63,9 +63,7 @@
     <string name="press_ok_to_show_menu">Нажмите ОК, чтобы открыть меню</string>
     <string name="long_ok_to_open_menu">Долгое ОК: открыть меню</string>
     <string name="edit_playlist">Редактировать плейлист</string>
-    <string name="edit_playlists">Редактировать плейлисты</string>
     <string name="confirm_delete_playlist">Удалить плейлист «%1$s»?</string>
-    <string name="playlists_count">Плейлистов: %1$d</string>
     <string name="playlist_actions">Действия</string>
     <string name="add_playlist">Добавить плейлист</string>
     <string name="add_to_favorites">Добавить в избранное</string>
