@@ -221,19 +221,57 @@
             android:paddingBottom="@dimen/spacing_sm"
             android:visibility="gone" />
 
-        <androidx.recyclerview.widget.RecyclerView
-            android:id="@+id/groups_list"
+        <LinearLayout
+            android:id="@+id/groups_column"
             android:layout_width="@dimen/card_size"
             android:layout_height="match_parent"
             android:background="@drawable/osd_scrim_top"
-            android:clipToPadding="false"
-            android:nextFocusRight="@id/guide_channels_list"
-            android:paddingStart="@dimen/spacing_sm"
-            android:paddingTop="@dimen/spacing_sm"
-            android:paddingEnd="@dimen/spacing_sm"
-            android:paddingBottom="@dimen/spacing_sm"
-            android:scrollbars="none"
-            android:visibility="gone" />
+            android:orientation="vertical">
+
+            <!-- Touch has no Left key, so the column carries the button that peels the next one
+                 open. It is hidden once there is nothing left to show. -->
+            <LinearLayout
+                android:id="@+id/menu_button"
+                android:layout_width="match_parent"
+                android:layout_height="@dimen/epg_ruler_height"
+                android:background="@drawable/bg_player_button"
+                android:clickable="true"
+                android:focusable="false"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingStart="@dimen/spacing_sm"
+                android:paddingEnd="@dimen/spacing_sm"
+                android:visibility="gone">
+
+                <ImageView
+                    android:layout_width="16dp"
+                    android:layout_height="16dp"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ic_chevron_left" />
+
+                <TextView
+                    style="@style/TvBro.Text.Time"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="@dimen/spacing_xs"
+                    android:ellipsize="end"
+                    android:singleLine="true"
+                    android:text="@string/show_menu" />
+            </LinearLayout>
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/groups_list"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:clipToPadding="false"
+                android:nextFocusRight="@id/guide_channels_list"
+                android:paddingStart="@dimen/spacing_sm"
+                android:paddingTop="@dimen/spacing_sm"
+                android:paddingEnd="@dimen/spacing_sm"
+                android:paddingBottom="@dimen/spacing_sm"
+                android:scrollbars="none" />
+        </LinearLayout>
 
         <LinearLayout
             android:layout_width="0dp"
@@ -243,16 +281,46 @@
 
             <!-- The time scale belongs to the grid, but it must not push the grid down: the channel
                  column has to start on the very same line as the first row of programmes, or every
-                 channel name would sit one scale height above its own programmes. An empty corner
-                 keeps that line free above the column, so both lists share one top edge. -->
+                 channel name would sit one scale height above its own programmes. The button that
+                 opens the groups column sits in that empty corner, and so does the corner itself
+                 when there is nothing left to open, so both lists keep sharing one top edge. -->
             <LinearLayout
                 android:layout_width="@dimen/guide_channel_column"
                 android:layout_height="match_parent"
                 android:orientation="vertical">
 
-                <View
+                <LinearLayout
                     android:layout_width="match_parent"
-                    android:layout_height="@dimen/epg_ruler_height" />
+                    android:layout_height="@dimen/epg_ruler_height">
+
+                    <LinearLayout
+                        android:id="@+id/groups_button"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:background="@drawable/bg_player_button"
+                        android:clickable="true"
+                        android:focusable="false"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal"
+                        android:paddingStart="@dimen/spacing_sm"
+                        android:paddingEnd="@dimen/spacing_sm">
+
+                        <ImageView
+                            android:layout_width="16dp"
+                            android:layout_height="16dp"
+                            android:contentDescription="@null"
+                            android:src="@drawable/ic_chevron_left" />
+
+                        <TextView
+                            style="@style/TvBro.Text.Time"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="@dimen/spacing_xs"
+                            android:ellipsize="end"
+                            android:singleLine="true"
+                            android:text="@string/categories" />
+                    </LinearLayout>
+                </LinearLayout>
 
                 <androidx.recyclerview.widget.RecyclerView
                     android:id="@+id/guide_channels_list"
