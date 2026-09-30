@@ -89,5 +89,12 @@ class GuideChannelsAdapter(
                 focused = RecyclerView.NO_POSITION
             }
         }
+        // A row that is bound while it already holds the focus never gets the callback above, so the
+        // cache would keep pointing at the row the remote has left and the centre key would answer
+        // for the wrong channel.
+        if (holder.itemView.hasFocus()) {
+            focused = holder.bindingAdapterPosition
+            onFocus(focused)
+        }
     }
 }

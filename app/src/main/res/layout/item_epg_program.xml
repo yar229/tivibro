@@ -5,7 +5,8 @@
     android:layout_height="match_parent"
     android:layout_margin="@dimen/epg_cell_margin"
     android:background="@drawable/bg_epg_cell"
-    android:focusable="false">
+    android:focusable="true"
+    android:focusableInTouchMode="true">
 
     <LinearLayout
         android:id="@+id/program_content"

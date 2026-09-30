@@ -51,6 +51,12 @@
     <dimen name="guide_info_description_text">17sp</dimen>
     <!-- Cap for the programme block of the guide info panel, so the description keeps its room -->
     <dimen name="guide_info_title_width">420dp</dimen>
+    <!-- The guide strip is a bit less than a third of the screen, so the picture is worth watching
+         while the guide is open. Its height is a fraction of the screen, and the width of the video
+         slot follows from it (16:9), so both are set in code from the measured screen instead of
+         being fixed dp values. -->
+    <item name="guide_info_panel_height" format="float" type="dimen">0.3</item>
+    <dimen name="guide_info_placeholder_size">56dp</dimen>
     <dimen name="epg_ruler_text">12sp</dimen>
     <dimen name="epg_ruler_tick">1dp</dimen>
     <dimen name="epg_now_line">3dp</dimen>

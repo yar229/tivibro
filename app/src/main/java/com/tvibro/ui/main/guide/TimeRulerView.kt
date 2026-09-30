@@ -56,7 +56,14 @@ class TimeRulerView @JvmOverloads constructor(
     private var nowPixel = -1
 
     init {
-        contentDescription = context.getString(R.string.epg_ruler)
+        // The scale only labels the grid below it, so it must not become a stop for anything that
+        // looks for focus: not the remote, and not the accessibility focus either. Some TV firmwares
+        // show the description of whatever holds the focus next to the top of the screen, and a
+        // description here leaked the name of the scale into the info panel area while walking the
+        // grid. Every cell already carries its own title and time, so nothing is lost.
+        isFocusable = false
+        isFocusableInTouchMode = false
+        importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO
     }
 
     fun setDayStart(start: Long) {

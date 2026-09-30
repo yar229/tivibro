@@ -22,7 +22,8 @@ import com.tvibro.data.model.Program
 class GuideRowsAdapter(
     hourWidthPx: Int,
     private val onProgramClick: (Int, Program) -> Unit,
-    private val onSelectionChanged: (Int, Program?) -> Unit,
+    private val onCellHighlighted: (Int, Program?) -> Unit,
+    private val onCellFocused: (Int, Program) -> Unit,
     private val onOffsetChanged: () -> Unit,
 ) : RecyclerView.Adapter<GuideRowsAdapter.RowHolder>() {
 
@@ -37,6 +38,9 @@ class GuideRowsAdapter(
     private var contentEnd = 0
     private var selectedChannel = RecyclerView.NO_POSITION
     private var selectedCell: Program? = null
+    private var focusedChannel = RecyclerView.NO_POSITION
+    private var focusedCell: Program? = null
+    private var cellMargin = 0
     private val rows = ArrayList<RowHolder>()
 
     private val dayWidth get() = hourWidth * GuideDaysAdapter.HOURS_IN_DAY
@@ -56,6 +60,8 @@ class GuideRowsAdapter(
         recomputeContentRange()
         // The cells are rebuilt from scratch, so a selection from the previous data cannot survive.
         clearSelection()
+        focusedChannel = RecyclerView.NO_POSITION
+        focusedCell = null
         notifyDataSetChanged()
     }
 
@@ -88,16 +94,16 @@ class GuideRowsAdapter(
         if (isSelected(channelPosition, program)) return
         selectedChannel = channelPosition
         selectedCell = program
-        applySelection()
-        onSelectionChanged(channelPosition, program)
+        applyHighlight()
+        onCellHighlighted(channelPosition, program)
     }
 
     fun clearSelection() {
         if (selectedChannel == RecyclerView.NO_POSITION && selectedCell == null) return
         selectedChannel = RecyclerView.NO_POSITION
         selectedCell = null
-        applySelection()
-        onSelectionChanged(RecyclerView.NO_POSITION, null)
+        applyHighlight()
+        onCellHighlighted(RecyclerView.NO_POSITION, null)
     }
 
     fun isSelected(channelPosition: Int, program: Program): Boolean =
@@ -107,45 +113,117 @@ class GuideRowsAdapter(
 
     fun selectedProgram(): Program? = selectedCell
 
+    /** Row that holds the remote crosshair inside the grid. */
+    fun focusedChannelPosition(): Int = focusedChannel
+
+    fun focusedProgram(): Program? = focusedCell
+
+    /** True while the crosshair really sits on that cell, not only when focus was asked for. */
+    fun holdsFocusAt(channelPosition: Int, program: Program): Boolean =
+        focusedChannel == channelPosition && focusedCell === program
+
     /**
-     * Hands input focus to the selected cell. Touch mode refuses focus for plain focusable views,
+     * True while a cell exists below or above the crosshair, no matter whether its row is on
+     * screen already. The grid therefore scrolls exactly like the channel column beside it - both
+     * lists move together - and only the real end of the list is a wall, where the remote has to be
+     * kept inside the grid instead of walking off into the bars around it.
+     */
+    fun hasCellBelow(): Boolean = hasCellInDirection(1)
+
+    fun hasCellAbove(): Boolean = hasCellInDirection(-1)
+
+    private fun hasCellInDirection(step: Int): Boolean {
+        val row = focusedChannel
+        if (row == RecyclerView.NO_POSITION) return false
+        val end = dayStart + GuideDaysAdapter.DAY_MS
+        var position = row + step
+        while (position in channels.indices) {
+            val channel = channels[position]
+            // The same rule the rows are filled with, so an empty row is not counted in.
+            if (programs[channel.id].orEmpty().any { program ->
+                    program.stop > dayStart && program.start < end &&
+                        pixelForTime(program.stop) > 0 && pixelForTime(program.start) < dayWidth
+                }
+            ) {
+                return true
+            }
+            position += step
+        }
+        return false
+    }
+
+    /**
+     * Pixels the time axis has to travel before the cell under the crosshair is fully on screen.
+     *
+     * The sign belongs to the movement of the grid: a cell hanging over the right edge moves it
+     * towards the present, a cell hanging over the left edge moves it back into the past, and the
+     * cell is never pushed further than that - a long programme does not throw the view across the
+     * day. Zero when the cell already fits.
+     *
+     * It is asked for the cell the crosshair really landed on, not for the direction of the key:
+     * the focus moves while the key event is still being handled, so the cell the user is heading
+     * for is only known once the cell reports it.
+     */
+    fun revealShiftForFocusedCell(): Int {
+        val program = focusedCell ?: return 0
+        if (viewport <= 0) return 0
+        val margin = cellMargin * 2
+        val start = pixelForTime(program.start)
+        val stop = pixelForTime(program.stop)
+        val target = when {
+            stop - offset > viewport - margin -> stop - (viewport - margin)
+            start - offset < margin -> start - margin
+            else -> return 0
+        }
+        return target - offset
+    }
+
+    /**
+     * Hands input focus to one cell of the grid. Touch mode refuses focus for plain focusable views,
      * so the cell has to ask for it in touch mode as well - otherwise OK would never reach it and
      * there would be no way to confirm a pick with a remote.
+     *
+     * Returns false when the row is not on screen (yet), so the caller can come back after the next
+     * layout instead of guessing.
      */
-    fun requestFocusOnSelected() {
-        if (selectedChannel == RecyclerView.NO_POSITION) return
+    fun requestFocusOnCell(channelPosition: Int, program: Program): Boolean {
         for (holder in rows) {
-            if (holder.channelPosition != selectedChannel) continue
+            if (holder.channelPosition != channelPosition) continue
             val content = holder.content
             for (index in 0 until content.childCount) {
                 val cell = content.getChildAt(index)
-                if (cell.tag !== selectedCell) continue
+                if (cell.tag !== program) continue
                 cell.isFocusableInTouchMode = true
-                cell.requestFocus()
-                return
+                return cell.requestFocus()
             }
         }
+        return false
     }
 
-    /** Restyles the cells of the attached rows after the selection or the highlight changed. */
-    private fun applySelection() {
+    /** Hands input focus to the selected cell. */
+    fun requestFocusOnSelected() {
+        val program = selectedCell ?: return
+        requestFocusOnCell(selectedChannel, program)
+    }
+
+    /** Restyles the cells of the attached rows after the pick, the crosshair or the clock changed. */
+    private fun applyHighlight() {
         for (holder in rows) {
             val content = holder.content
             for (index in 0 until content.childCount) {
                 val cell = content.getChildAt(index)
                 val program = cell.tag as? Program ?: continue
                 val selected = isSelected(holder.channelPosition, program)
-                cell.setBackgroundResource(backgroundFor(program, selected))
+                val focused = focusedChannel == holder.channelPosition && focusedCell === program
+                cell.setBackgroundResource(backgroundFor(program, selected, focused))
                 cell.isSelected = selected
-                // Only the picked cell is focusable, so D-pad keeps its current job on the grid.
-                cell.isFocusable = selected
-                cell.isFocusableInTouchMode = selected
             }
         }
     }
 
-    private fun backgroundFor(program: Program, selected: Boolean): Int = when {
+    private fun backgroundFor(program: Program, selected: Boolean, focused: Boolean): Int = when {
         selected -> R.drawable.bg_epg_selected
+        focused -> R.drawable.bg_epg_focus
         highlightCurrent && System.currentTimeMillis() in program.start until program.stop ->
             R.drawable.bg_epg_now
         else -> R.drawable.bg_epg_cell
@@ -244,6 +322,7 @@ class GuideRowsAdapter(
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RowHolder {
         val view = LayoutInflater.from(parent.context).inflate(R.layout.item_guide_row, parent, false)
         hourWidth = parent.resources.getDimensionPixelSize(R.dimen.epg_hour_width)
+        cellMargin = parent.resources.getDimensionPixelSize(R.dimen.epg_cell_margin)
         return RowHolder(view)
     }
 
@@ -306,8 +385,30 @@ class GuideRowsAdapter(
             cell.findViewById<TextView>(R.id.program_title).text = program.title
             cell.findViewById<TextView>(R.id.program_time).text =
                 Fmt.time(program.start) + " - " + Fmt.time(program.stop)
-            cell.setBackgroundResource(backgroundFor(program, isSelected(holder.channelPosition, program)))
+            cell.setBackgroundResource(
+                backgroundFor(
+                    program,
+                    isSelected(holder.channelPosition, program),
+                    focusedChannel == holder.channelPosition && focusedCell === program,
+                )
+            )
             cell.setOnClickListener { onProgramClick(holder.channelPosition, program) }
+            // Every cell is a focus target, so a remote can walk the grid, and the cell that holds
+            // the crosshair is what the info panel describes.
+            cell.setOnFocusChangeListener { _, hasFocus ->
+                if (hasFocus) {
+                    focusedChannel = holder.channelPosition
+                    focusedCell = program
+                    applyHighlight()
+                    onCellHighlighted(holder.channelPosition, program)
+                    onCellFocused(holder.channelPosition, program)
+                } else if (focusedChannel == holder.channelPosition && focusedCell === program) {
+                    focusedChannel = RecyclerView.NO_POSITION
+                    focusedCell = null
+                    applyHighlight()
+                    onCellHighlighted(RecyclerView.NO_POSITION, null)
+                }
+            }
             content.addView(cell)
             cursor = start + width
         }

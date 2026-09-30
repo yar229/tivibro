@@ -354,7 +354,6 @@
     <string name="reset_positions_msg">You will lose positions you have customized for channels in the current group</string>
     <string name="you_will_lose_changes">You will lose changes in the current group</string>
     <string name="channels_count">Channels: %1$d</string>
-    <string name="epg_ruler">Programme timeline</string>
     <string name="movies_count">Movies: %1$d</string>
     <string name="shows_count">Shows: %1$d</string>
     <string name="parent_playlist">Parent playlist</string>

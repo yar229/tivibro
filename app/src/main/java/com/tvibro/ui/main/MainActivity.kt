@@ -5,7 +5,6 @@ import android.content.Intent
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.text.StaticLayout
 import android.util.TypedValue
 import android.view.Choreographer
 import android.view.KeyEvent
@@ -16,10 +15,13 @@ import android.view.View
 import android.view.ViewConfiguration
 import android.view.ViewGroup
 import android.widget.FrameLayout
+import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.doOnPreDraw
+import androidx.core.view.updateLayoutParams
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.tvibro.R
@@ -38,6 +40,7 @@ import com.tvibro.ui.main.guide.GuideDaysAdapter
 import com.tvibro.ui.main.guide.GuideRowsAdapter
 import com.tvibro.ui.main.guide.TimeRulerView
 import com.tvibro.ui.pin.PinActivity
+import com.tvibro.ui.player.Playback
 import com.tvibro.ui.player.PlayerActivity
 import com.tvibro.ui.playlist.PlaylistWizardActivity
 import com.tvibro.ui.search.SearchActivity
@@ -68,7 +71,11 @@ class MainActivity : AppCompatActivity() {
     private lateinit var guideInfoTitle: TextView
     private lateinit var guideInfoTime: TextView
     private lateinit var guideInfoDescription: TextView
-    private lateinit var guideInfoDescriptionTail: TextView
+    private lateinit var guideInfoProgress: ProgressBar
+    private lateinit var guideInfoRemaining: TextView
+    private lateinit var guideInfoPlayer: FrameLayout
+    private lateinit var guideInfoSlot: FrameLayout
+    private lateinit var guideInfoPlaceholder: ImageView
     private lateinit var nowLine: View
     private lateinit var emptyView: TextView
     private lateinit var statusText: TextView
@@ -94,14 +101,14 @@ class MainActivity : AppCompatActivity() {
     private var lastSyncPosition = RecyclerView.NO_POSITION
     private var lastSyncTop = 0
     private var restoreFocusPosition = RecyclerView.NO_POSITION
-    private var pendingDescription: String? = null
-    private var splitDescription = ""
-    private var splitDescriptionWidth = 0
-    private var splitHeadLines = 0
     private var dayStart = 0L
     private var dayIndex = 0
     private var leftStage = STAGE_CONTENT
+    private var answeredConfirm = 0L
     private var pendingFocus = true
+    /** Crosshair target that still has to be reached, kept until the cell really holds the focus. */
+    private var focusTargetChannel = RecyclerView.NO_POSITION
+    private var focusTargetProgram: Program? = null
     private var firstResume = true
     private var pendingAutoPlay = false
     private var playerLaunched = false
@@ -143,7 +150,8 @@ class MainActivity : AppCompatActivity() {
         guideRowsAdapter = GuideRowsAdapter(
             hourWidthPx = resources.getDimensionPixelSize(R.dimen.epg_hour_width),
             onProgramClick = { position, program -> onGuideProgramClick(position, program) },
-            onSelectionChanged = { _, _ -> updateGuideInfo() },
+            onCellHighlighted = { _, _ -> updateGuideInfo() },
+            onCellFocused = { _, _ -> revealFocusedCell() },
             onOffsetChanged = {
                 positionNowLine()
                 timeRuler.setOffset(guideRowsAdapter.currentOffset())
@@ -193,8 +201,43 @@ class MainActivity : AppCompatActivity() {
         pendingFocus = true
         // The panel font size can be changed while Settings is open on top of the guide.
         applyGuideInfoFontScale()
+        // The window can be a different size than it was at startup, so the strip is measured again.
+        applyGuideInfoPanelSize()
+        // A stream that the full screen player handed over keeps running, so the panel has to pick
+        // the picture up again every time the guide comes back on top.
+        attachMiniPlayer()
         reload(autoPlay = firstResume && prefs.turnOnLastChannel)
         firstResume = false
+    }
+
+    override fun onPause() {
+        super.onPause()
+        // Only the picture this screen owns is parked here. A stream that is on its way into the
+        // player window must not be touched, the player starts playing it by itself.
+        if (Playback.inGuide()) Playback.pause()
+    }
+
+    /**
+     * Coming back from the player, the window takes the focus for the first focusable view of the
+     * tree - the "Today" button above the guide - and it does that after onResume, so a crosshair
+     * that was set there would be thrown away again. The target is therefore re-applied as soon as
+     * the window owns the focus.
+     */
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) applyPendingFocus()
+    }
+
+    /**
+     * The app left the screen. The picture in the strip is a live tuner, and a tuner serves one
+     * channel at a time: a stream that only sits in the background would keep the source and no
+     * other player could take it. So it is stopped here, and the slot goes back to being empty.
+     * Another screen of this app covering the guide is not a background - the new window has already
+     * started, so the app is still in the foreground and the stream keeps running.
+     */
+    override fun onStop() {
+        super.onStop()
+        if (Playback.inGuide() && !TvBroApp.get().inForeground) Playback.stop()
     }
 
     override fun onDestroy() {
@@ -203,6 +246,7 @@ class MainActivity : AppCompatActivity() {
         guideExecutor.shutdownNow()
         main.removeCallbacksAndMessages(null)
         playerLaunched = false
+        if (Playback.inGuide()) Playback.stop()
     }
 
     // ------------------------------------------------------------------ setup
@@ -220,18 +264,23 @@ class MainActivity : AppCompatActivity() {
         guideInfoTitle = findViewById(R.id.guide_info_title)
         guideInfoTime = findViewById(R.id.guide_info_time)
         guideInfoDescription = findViewById(R.id.guide_info_description)
-        guideInfoDescriptionTail = findViewById(R.id.guide_info_description_tail)
+        guideInfoProgress = findViewById(R.id.guide_info_progress)
+        guideInfoRemaining = findViewById(R.id.guide_info_remaining)
+        guideInfoPlayer = findViewById(R.id.guide_info_player)
+        guideInfoSlot = findViewById(R.id.guide_info_slot)
+        guideInfoPlaceholder = findViewById(R.id.guide_info_placeholder)
+        // The picture is decoration: the remote has to walk the guide, never the video, so nothing
+        // inside this slot may become a focus target.
+        guideInfoPlayer.descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
+        applyGuideInfoPanelSize()
         nowLine = findViewById(R.id.now_line)
         // Captured after the global font scale is applied, so the base sizes are the real ones.
         captureFontScale(guideInfoTitle) { prefs.infoPanelFont }
         captureFontScale(guideInfoTime) { prefs.infoPanelFont }
+        captureFontScale(guideInfoRemaining) { prefs.infoPanelFont }
         captureFontScale(guideInfoDescription) { prefs.infoPanelFont }
-        captureFontScale(guideInfoDescriptionTail) { prefs.infoPanelFont }
-        // A longer or shorter title changes the room the description gets, so the split has to be
-        // redone whenever the panel is measured again.
-        guideInfoPanel.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> splitDescriptionNow() }
-        // The description head is laid out after the programme block, so both heights are final here.
-        guideInfoDescription.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> alignGuideDescriptionHead() }
+        // A stream that is still running belongs into the panel as soon as the guide is back on top.
+        attachMiniPlayer()
         emptyView = findViewById(R.id.empty_view)
         statusText = findViewById(R.id.status_text)
         clockView = findViewById(R.id.clock)
@@ -335,10 +384,6 @@ class MainActivity : AppCompatActivity() {
                     autoPlayLastChannel()
                 }
                 loadGuidePrograms(index)
-                if (pendingFocus) {
-                    pendingFocus = false
-                    focusGuide()
-                }
             }
         }
     }
@@ -380,7 +425,17 @@ class MainActivity : AppCompatActivity() {
      */
     private fun applyGuideData(channels: List<Channel>, programs: Map<Long, List<Program>>) {
         guideRowsAdapter.setData(channels, programs)
-        programsList.doOnPreDraw { scrollTimelineToNow() }
+        // The crosshair needs a built row, so where it has to land is only known now.
+        if (pendingFocus) {
+            pendingFocus = false
+            prepareGuideFocus()
+        }
+        programsList.doOnPreDraw {
+            scrollTimelineToNow()
+            // Last attempt of this layout pass: the window gives the focus to the first focusable
+            // view of the tree ("Today") after onResume, so the crosshair has to be set again here.
+            applyPendingFocus()
+        }
         // A picked cell disappears together with the old data, so hand focus back to the row it
         // belonged to instead of leaving the remote with nothing to confirm.
         if (restoreFocusPosition != RecyclerView.NO_POSITION) {
@@ -460,124 +515,123 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * Describes the programme the user is looking at. The pick wins when a cell was tapped,
-     * otherwise the panel follows the focused channel, so walking the list with a remote is enough
-     * to read what is on. The channel itself stays in the column on the left, so only the programme
-     * is repeated here.
+     * Describes the programme the user is looking at. The pick wins when a cell was confirmed, then
+     * the cell under the remote crosshair, so walking the grid with a remote is enough to read what
+     * is on. The channel itself stays in the column on the left, so only the programme is repeated
+     * here. The strip itself is never hidden: it holds the video slot, and its height must not
+     * depend on whether a stream is running.
      */
     private fun updateGuideInfo() {
         if (!::guideInfoPanel.isInitialized) return
         val channel = currentChannels.getOrNull(infoChannelPosition())
         if (channel == null) {
-            guideInfoPanel.visible(false)
+            guideInfoTitle.text = getString(R.string.no_programs)
+            guideInfoTime.text = ""
+            guideInfoProgress.visible(false)
+            guideInfoRemaining.visible(false)
+            fillGuideDescription("")
             return
         }
-        guideInfoPanel.visible(true)
-        val program = guideRowsAdapter.selectedProgram() ?: programAt(channel, guideFocusTime())
+        val program = guideRowsAdapter.selectedProgram()
+            ?: guideRowsAdapter.focusedProgram()
+            ?: programAt(channel, guideFocusTime())
         guideInfoTitle.text = program?.title ?: getString(R.string.no_programs)
         val now = System.currentTimeMillis()
-        guideInfoTime.text = if (program == null) {
-            getString(R.string.no_information)
+        if (program == null) {
+            guideInfoTime.text = getString(R.string.no_information)
+            guideInfoProgress.visible(false)
+            guideInfoRemaining.visible(false)
         } else {
-            val range = Fmt.timeRange(program.start, program.stop, Locale.getDefault())
-            // Progress and a countdown only mean something while the programme is running.
-            if (now in program.start until program.stop) {
-                "$range · ${Fmt.percent(program.start, program.stop, now)}% · ${Fmt.remainingText(program.stop, now)}"
-            } else {
-                range
-            }
+            guideInfoTime.text = Fmt.timeRange(program.start, program.stop, Locale.getDefault())
+            // The bar carries the progress, exactly as in the bottom panel of the player, so the
+            // percentage does not have to be read as text. Both it and the countdown only mean
+            // something while the programme is running.
+            val running = now in program.start until program.stop
+            guideInfoProgress.visible(running)
+            guideInfoProgress.progress = Fmt.percent(program.start, program.stop, now)
+            guideInfoRemaining.visible(running)
+            guideInfoRemaining.text = Fmt.remainingText(program.stop, now)
         }
         val description = program?.description.orEmpty()
         fillGuideDescription(description)
     }
 
     /**
-     * Lays the description around the programme block: the first lines sit beside the title and the
-     * time, the rest continues underneath it across the full width. Android has no text flow around
-     * a float, so the text is cut at the line boundary the narrow column produces.
+     * The strip is exactly as tall as the video slot, so the description is the part that gives
+     * way: it takes the room left under the title and the time and is cut with an ellipsis. The
+     * line count is measured from the real font metrics instead of being guessed, so a bigger
+     * panel font shrinks the text instead of pushing the strip out of the layout.
      */
     private fun fillGuideDescription(description: String) {
-        pendingDescription = description
-        splitDescriptionNow()
-    }
-
-    /**
-     * Splits the pending description. The column width follows the measured width of the programme
-     * block, so a new title is only cut correctly after the panel has been laid out again - hence
-     * this is called from the layout listener as well.
-     */
-    private fun splitDescriptionNow() {
-        val description = pendingDescription ?: return
-        val maxLines = prefs.switchDescriptionMaxLines
-        // The block holds a title line and a time line, so that is how much fits beside it.
-        val headLines = minOf(PROGRAMME_BLOCK_LINES, maxLines)
-        val width = guideDescriptionHeadWidth()
         if (description.isEmpty()) {
-            guideInfoDescription.visible(false)
             guideInfoDescription.text = ""
-            guideInfoDescriptionTail.visible(false)
-            guideInfoDescriptionTail.text = ""
-            splitDescription = ""
-            splitDescriptionWidth = 0
             return
         }
-        if (width <= 0) return
-        if (description == splitDescription && width == splitDescriptionWidth && headLines == splitHeadLines) {
-            return
-        }
-        val (first, rest) = cutAtLineBoundary(description, width, headLines)
-        splitDescription = description
-        splitDescriptionWidth = width
-        splitHeadLines = headLines
-        guideInfoDescription.visible(true)
-        guideInfoDescription.maxLines = headLines
-        guideInfoDescription.text = first
-        val tailLines = (maxLines - headLines).coerceAtLeast(0)
-        guideInfoDescriptionTail.maxLines = tailLines
-        guideInfoDescriptionTail.text = rest
-        guideInfoDescriptionTail.visible(tailLines > 0 && rest.isNotEmpty())
+        guideInfoDescription.text = description
+        guideInfoDescription.maxLines = descriptionLines()
     }
 
-    /** Width of the description column next to the programme block. */
-    private fun guideDescriptionHeadWidth(): Int {
-        val panel = guideInfoPanel
-        if (panel.width <= 0) return 0
-        val gap = resources.getDimensionPixelSize(R.dimen.spacing_lg)
-        return panel.width - panel.paddingStart - panel.paddingEnd - guideInfoProgramme.width - gap
-    }
-
-    /** Cuts [text] after [headLines] lines of a [width] wide column. */
-    private fun cutAtLineBoundary(text: String, width: Int, headLines: Int): Pair<String, String> {
-        val layout = StaticLayout.Builder.obtain(text, 0, text.length, guideInfoDescription.paint, width).build()
-        if (layout.lineCount <= headLines) return text to ""
-        // A line break can land between the halves of a surrogate pair, which would corrupt the text.
-        var cut = layout.getLineEnd(headLines - 1)
-        if (cut in 1 until text.length && Character.isHighSurrogate(text[cut - 1])) cut--
-        return text.substring(0, cut).trimEnd() to text.substring(cut).trimStart()
+    /** How many description lines fit into the space the panel has left. */
+    private fun descriptionLines(): Int {
+        val available = guideInfoDescription.height
+        if (available <= 0) return prefs.switchDescriptionMaxLines.coerceAtLeast(1)
+        val lineHeight = guideInfoDescription.lineHeight
+        if (lineHeight <= 0) return prefs.switchDescriptionMaxLines.coerceAtLeast(1)
+        return (available / lineHeight).coerceAtLeast(1)
     }
 
     /**
-     * Head and programme block stand side by side, so the row is as tall as the taller of the two.
-     * When the block wins, the last line of the head floats above the tail that follows the row and
-     * the flow looks broken. Pushing the head down by that difference makes its last line the last
-     * line of the row, so the description keeps one grid on both sides of the title. Line heights of
-     * the title, the time and the description never match exactly, so the shift is measured, not
-     * guessed.
+     * Sizes the strip from the real height of the window instead of a dp constant, so it is a bit
+     * less than a third of the screen on a TV and on a tablet alike. The video slot keeps 16:9 and
+     * takes exactly that height, which makes the slot the reference: the description gives way, the
+     * strip never changes its height. The grid does not get a fixed height either, so it simply
+     * takes the room that is left.
      */
-    private fun alignGuideDescriptionHead() {
-        if (!::guideInfoDescription.isInitialized) return
-        val leftover = if (guideInfoDescriptionTail.visibility == View.VISIBLE) {
-            (guideInfoProgramme.height - guideInfoDescription.height).coerceAtLeast(0)
-        } else {
-            0
+    private fun applyGuideInfoPanelSize() {
+        val screen = screenHeight()
+        if (screen <= 0) return
+        val height = (screen * resources.getFloat(R.dimen.guide_info_panel_height)).toInt()
+        if (height <= 0) return
+        guideInfoPanel.updateLayoutParams<ViewGroup.LayoutParams> { this.height = height }
+        guideInfoSlot.updateLayoutParams<LinearLayout.LayoutParams> {
+            width = (height * 16f / 9f).toInt()
         }
-        guideInfoDescription.translationY = leftover.toFloat()
     }
 
-    /** Pick first, then the focused row, then the highlighted channel as a usable default. */
+    /** Height of the window this activity lives in, in pixels. */
+    private fun screenHeight(): Int {
+        val decor = findViewById<View>(android.R.id.content)
+        val measured = decor?.height ?: 0
+        if (measured > 0) return measured
+        val metrics = resources.displayMetrics
+        return if (metrics.heightPixels > 0) metrics.heightPixels else decor?.measuredHeight ?: 0
+    }
+
+    /**
+     * Puts the picture of a running stream into the panel. The engine is the very one the full
+     * screen player used, so the channel is neither restarted nor reconnected - only its window
+     * becomes small. The slot stays the same size in every state: with nothing playing it shows the
+     * sign of a television, so the strip never jumps and never leaves a hole.
+     */
+    private fun attachMiniPlayer() {
+        if (!::guideInfoPlayer.isInitialized) return
+        val engine = Playback.engine()
+        if (engine == null) {
+            guideInfoPlayer.removeAllViews()
+            guideInfoPlaceholder.visible(true)
+            return
+        }
+        guideInfoPlaceholder.visible(false)
+        Playback.attachTo(guideInfoPlayer)
+        Playback.play()
+    }
+
+    /** Pick first, then the focused cell, then the focused row, then the highlighted channel. */
     private fun infoChannelPosition(): Int {
         val selected = guideRowsAdapter.selectedChannelPosition()
         if (selected in currentChannels.indices) return selected
+        val focusedCell = guideRowsAdapter.focusedChannelPosition()
+        if (focusedCell in currentChannels.indices) return focusedCell
         val focused = guideChannelsAdapter.focusedPosition()
         if (focused in currentChannels.indices) return focused
         val current = currentChannels.indexOfFirst { it.id == guideChannelsAdapter.currentId() }
@@ -963,13 +1017,74 @@ class MainActivity : AppCompatActivity() {
         list.postDelayed({ focusList(list, position, attempts - 1) }, FOCUS_RETRY_MS)
     }
 
+    /**
+     * Where the remote lands when the guide opens and when the full screen player gives the screen
+     * back: on the programme that is on air right now in the channel that was played last. The
+     * crosshair therefore sits on the very transmission the user came from, and the info panel
+     * describes that same cell without anyone touching anything.
+     *
+     * The row has to be on screen before the cell inside it can take the focus, so the grid is
+     * scrolled to that channel first and the cell is looked for again after every layout pass.
+     */
     private fun focusGuide() {
         if (currentChannels.isEmpty()) {
             focusFirst(daysList)
             return
         }
+        prepareGuideFocus()
+    }
+
+    /** Scrolls the row of the last played channel into view and puts the crosshair on its programme. */
+    private fun prepareGuideFocus() {
         val index = currentChannels.indexOfFirst { it.id == guideChannelsAdapter.currentId() }
-        focusList(guideChannelsList, if (index >= 0) index else 0)
+            .takeIf { it >= 0 } ?: 0
+        val channel = currentChannels.getOrNull(index)
+        if (channel == null) {
+            focusList(guideChannelsList, index)
+            return
+        }
+        // Another day can be on the axis, and then "now" is not part of it: the start of that day is
+        // the leftmost thing the user can see, so that is what the crosshair lands on.
+        val now = System.currentTimeMillis()
+        val time = if (now in dayStart until dayStart + GuideDaysAdapter.DAY_MS) now else dayStart
+        val program = programAt(channel, time)
+        if (program == null) {
+            focusList(guideChannelsList, index)
+            return
+        }
+        focusTargetChannel = index
+        focusTargetProgram = program
+        // The row has to be on screen before the cell inside it can take the focus.
+        programsList.scrollToPosition(index)
+        applyPendingFocus(FOCUS_ATTEMPTS)
+    }
+
+    /**
+     * Puts the crosshair on the cell it was aimed at and keeps asking until the cell reports that
+     * it holds the focus. A single request is not enough: the rows are built during layout and the
+     * window itself hands the focus to the first focusable view of the tree, which is the "Today"
+     * button above the guide. The target is kept until it is really reached, so every later moment
+     * that can take the focus away is followed by another attempt.
+     */
+    private fun applyPendingFocus(attempts: Int = FOCUS_ATTEMPTS) {
+        val program = focusTargetProgram ?: return
+        val position = focusTargetChannel
+        if (guideRowsAdapter.holdsFocusAt(position, program)) {
+            focusTargetProgram = null
+            focusTargetChannel = RecyclerView.NO_POSITION
+            return
+        }
+        // The user has taken the remote to the channel column on purpose. A retry that is left over
+        // from the opening of the guide must not pull the focus back into the grid under the finger
+        // that is about to press the centre key, or the press lands on a cell instead of the row.
+        if (guideChannelsList.hasFocus()) {
+            focusTargetProgram = null
+            focusTargetChannel = RecyclerView.NO_POSITION
+            return
+        }
+        guideRowsAdapter.requestFocusOnCell(position, program)
+        if (attempts <= 0) return
+        main.postDelayed({ applyPendingFocus(attempts - 1) }, FOCUS_RETRY_MS)
     }
 
     private fun scrollTimeline(hours: Int) {
@@ -977,6 +1092,37 @@ class MainActivity : AppCompatActivity() {
         guideRowsAdapter.setOffset(
             guideRowsAdapter.currentOffset() + hours * guideRowsAdapter.hourWidthPx()
         )
+        updateGuideInfo()
+    }
+
+    /**
+     * Inside the grid the D-pad belongs to the crosshair, so the key is handed to the default focus
+     * search. The time axis follows the cell that receives the focus - see [revealFocusedCell] -
+     * because the crosshair only lands on the next cell while the key event is still being handled.
+     * Going left also has to be able to leave the grid: when the focus does not move at all the data
+     * ends in that direction, and the channel column on the left takes the remote back instead of
+     * trapping the user in the grid.
+     */
+    private fun moveCrosshair(direction: Int) {
+        if (direction >= 0) return
+        val before = guideRowsAdapter.focusedProgram()
+        main.post {
+            if (guideRowsAdapter.focusedProgram() === before) {
+                focusList(guideChannelsList, guideRowsAdapter.focusedChannelPosition())
+            }
+        }
+    }
+
+    /**
+     * Brings the cell under the crosshair fully into the viewport, moving the time axis by as little
+     * as it takes. Without it the remote walks into a cell that lies outside the grid and the user
+     * is left with a focus nobody can see.
+     */
+    private fun revealFocusedCell() {
+        guideRowsAdapter.setViewport(programsList.width)
+        val shift = guideRowsAdapter.revealShiftForFocusedCell()
+        if (shift == 0) return
+        guideRowsAdapter.setOffset(guideRowsAdapter.currentOffset() + shift)
         updateGuideInfo()
     }
 
@@ -1159,6 +1305,77 @@ class MainActivity : AppCompatActivity() {
         startActivity(Intent(this, PlaylistWizardActivity::class.java))
     }
 
+    /**
+     * The remote has to switch the channel on the first press, and the key can no longer be caught
+     * in [onKeyDown]: a focused channel row or grid cell consumes the confirm key itself and turns
+     * it into `performClick()`, which in the grid only marks the programme - the two steps a finger
+     * needs, where the first touch is used to read the channel before it is played. The key is
+     * taken here instead, before the focused view ever sees it, so the tap keeps its two steps and
+     * the remote gets a single press.
+     */
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (isConfirmKey(event)) {
+            if (event.action == KeyEvent.ACTION_UP) {
+                // The release of a press that was answered already must not reach the row: the row
+                // turns it into a click and the channel would be picked a second time.
+                if (event.downTime == answeredConfirm) {
+                    answeredConfirm = 0L
+                    return true
+                }
+            } else if (event.repeatCount == 0 && switchChannelFromRemote()) {
+                answeredConfirm = event.downTime
+                return true
+            }
+        }
+        return super.dispatchKeyEvent(event)
+    }
+
+    private fun isConfirmKey(event: KeyEvent): Boolean {
+        if (event.action != KeyEvent.ACTION_DOWN && event.action != KeyEvent.ACTION_UP) return false
+        return when (event.keyCode) {
+            // BUTTON_A is what a lot of TV box remotes send for the centre key.
+            KeyEvent.KEYCODE_DPAD_CENTER,
+            KeyEvent.KEYCODE_ENTER,
+            KeyEvent.KEYCODE_NUMPAD_ENTER,
+            KeyEvent.KEYCODE_BUTTON_A,
+            -> true
+            else -> false
+        }
+    }
+
+    /**
+     * Plays the channel the remote stands on. Inside the open guide the centre key always means
+     * "watch this", wherever the focus happens to sit: the focused row of the channel column, the
+     * row of the crosshair, or - while the focus is still up on the days strip - the row the
+     * crosshair is on. Waiting for the focus to reach the row is what made the first press look
+     * like a focus move, and the day is picked with left and right anyway, see [selectDay].
+     * Outside the guide the key is left alone, so the categories and the menu keep their meaning.
+     */
+    private fun switchChannelFromRemote(): Boolean {
+        if (leftStage != STAGE_CONTENT) return false
+        val grid = programsList.hasFocus()
+        if (!grid && !guideChannelsList.hasFocus() && !daysList.hasFocus()) return false
+        val focusedRow = focusedChannelRow()
+        val position = when {
+            grid -> guideRowsAdapter.focusedChannelPosition()
+            focusedRow != RecyclerView.NO_POSITION -> focusedRow
+            else -> guideRowsAdapter.focusedChannelPosition()
+        }
+        if (position == RecyclerView.NO_POSITION) return false
+        onGuideChannelClick(position)
+        return true
+    }
+
+    /**
+     * Row of the channel column that really holds the focus, asked of the view tree instead of the
+     * cache of the adapter: a row that is focused while it gets rebound never reports a focus
+     * change, and the cache then points at a row the remote has already left.
+     */
+    private fun focusedChannelRow(): Int {
+        val position = guideChannelsList.getChildAdapterPosition(guideChannelsList.findFocus())
+        return if (position != RecyclerView.NO_POSITION) position else guideChannelsAdapter.focusedPosition()
+    }
+
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
         when (keyCode) {
             KeyEvent.KEYCODE_MENU -> {
@@ -1197,6 +1414,10 @@ class MainActivity : AppCompatActivity() {
                     return true
                 }
                 if (leftStage == STAGE_MENU) return true
+                if (leftStage == STAGE_CONTENT && programsList.hasFocus()) {
+                    moveCrosshair(-1)
+                    return false
+                }
                 openLeftColumn()
                 return true
             }
@@ -1209,14 +1430,31 @@ class MainActivity : AppCompatActivity() {
                     closeLeftColumn()
                     return true
                 }
+                // From the channel column the right key belongs to the grid, so the crosshair can
+                // enter it; only the days strip and an open column keep the timeline shortcut.
+                if (guideChannelsList.hasFocus()) return false
+                if (programsList.hasFocus()) {
+                    moveCrosshair(1)
+                    return false
+                }
                 scrollTimeline(TIMELINE_STEP_HOURS)
                 return true
             }
             KeyEvent.KEYCODE_DPAD_UP -> {
+                if (programsList.hasFocus()) {
+                    // The grid scrolls like the channel column next to it: the crosshair walks on
+                    // and both lists move together. Only the real end of the list stops it, so the
+                    // focus can never wander off into the bars around the guide.
+                    if (!guideRowsAdapter.hasCellAbove()) return true
+                    return false
+                }
                 if (leftStage == STAGE_CONTENT && !daysList.hasFocus()) {
                     scrollTimeline(-TIMELINE_STEP_HOURS)
                     return true
                 }
+            }
+            KeyEvent.KEYCODE_DPAD_DOWN -> {
+                if (programsList.hasFocus() && !guideRowsAdapter.hasCellBelow()) return true
             }
             KeyEvent.KEYCODE_BACK -> {
                 if (leftStage != STAGE_CONTENT) {
@@ -1241,6 +1479,14 @@ class MainActivity : AppCompatActivity() {
     override fun onBackPressed() {
         if (leftStage != STAGE_CONTENT) {
             closeLeftColumn()
+            return
+        }
+        // The picture in the strip is the only thing that can still be running here, and it is not
+        // focusable on purpose, so back is the way to get rid of it.
+        if (Playback.inGuide()) {
+            Playback.stop()
+            // The slot goes back to the sign of a television, the stream is really over now.
+            attachMiniPlayer()
             return
         }
         if (prefs.confirmExit) {
@@ -1271,11 +1517,12 @@ class MainActivity : AppCompatActivity() {
         private const val STAGE_MENU = 2
         private const val TIMELINE_STEP_HOURS = 2
             private const val NOW_LINE_MARGIN = 0.12f
-            /** Title line plus time line: what the description has to flow around. */
-            private const val PROGRAMME_BLOCK_LINES = 2
         private const val MIN_FLING_PX_PER_SEC = 350f
+
         private const val FLING_DECAY = 0.95f
-        private const val FOCUS_ATTEMPTS = 5
-        private const val FOCUS_RETRY_MS = 60L
+    /** A slow box can need a few layout passes before the row and the window agree on the focus. */
+    private const val FOCUS_ATTEMPTS = 10
+    private const val FOCUS_RETRY_MS = 60L
+
     }
 }
