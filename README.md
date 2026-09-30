@@ -1,7 +1,3 @@
 # TiViBro player
 
-Сгенерированный AI плеер IPTV для AndroidTV.
-
-Основная задача - быть похожим по поведению на TiViMate.
-
-Тестировался только базовый функционал - добавлялся один m3u, один epg, проигрывание, переключение каналов, внешний вид плеера.
+AndroidTV/Android IPTV/OTT player inspired by TiViMate
