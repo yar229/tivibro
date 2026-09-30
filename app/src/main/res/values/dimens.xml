@@ -47,6 +47,10 @@
     <dimen name="guide_channel_column">168dp</dimen>
     <dimen name="epg_cell_margin">1dp</dimen>
     <dimen name="epg_ruler_height">26dp</dimen>
+    <!-- 15% below text_lg: two description lines still have to cover the title plus time block -->
+    <dimen name="guide_info_description_text">17sp</dimen>
+    <!-- Cap for the programme block of the guide info panel, so the description keeps its room -->
+    <dimen name="guide_info_title_width">420dp</dimen>
     <dimen name="epg_ruler_text">12sp</dimen>
     <dimen name="epg_ruler_tick">1dp</dimen>
     <dimen name="epg_now_line">3dp</dimen>

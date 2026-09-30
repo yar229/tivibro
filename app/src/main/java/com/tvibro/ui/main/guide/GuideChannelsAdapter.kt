@@ -14,11 +14,13 @@ import com.tvibro.data.model.Channel
 class GuideChannelsAdapter(
     private val onClick: (Int) -> Unit,
     private val onLongClick: (Int) -> Unit,
+    private val onFocus: (Int) -> Unit,
 ) : RecyclerView.Adapter<GuideChannelsAdapter.Holder>() {
 
     private var items: List<Channel> = emptyList()
     private var currentId: Long = -1L
     private var highlightCurrent: Boolean = true
+    private var focused = RecyclerView.NO_POSITION
 
     class Holder(view: View) : RecyclerView.ViewHolder(view) {
         val logo: ImageView = view.findViewById(R.id.logo)
@@ -41,6 +43,9 @@ class GuideChannelsAdapter(
     }
 
     fun currentId(): Long = currentId
+
+    /** Row that currently holds the remote focus, or NO_POSITION when the list has none. */
+    fun focusedPosition(): Int = focused
 
     fun setHighlightCurrent(enabled: Boolean) {
         if (highlightCurrent == enabled) return
@@ -71,6 +76,18 @@ class GuideChannelsAdapter(
         holder.itemView.setOnLongClickListener {
             onLongClick(holder.bindingAdapterPosition)
             true
+        }
+        // Moving through the rows with a remote is what tells the info panel which channel to
+        // describe, so focus has to be reported instead of only being drawn.
+        holder.itemView.setOnFocusChangeListener { _, hasFocus ->
+            val focusedRow = holder.bindingAdapterPosition
+            if (focusedRow == RecyclerView.NO_POSITION) return@setOnFocusChangeListener
+            if (hasFocus) {
+                focused = focusedRow
+                onFocus(focusedRow)
+            } else if (focused == focusedRow) {
+                focused = RecyclerView.NO_POSITION
+            }
         }
     }
 }

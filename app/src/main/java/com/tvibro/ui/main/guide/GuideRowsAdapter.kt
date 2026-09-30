@@ -21,7 +21,8 @@ import com.tvibro.data.model.Program
  */
 class GuideRowsAdapter(
     hourWidthPx: Int,
-    private val onProgramClick: (Int) -> Unit,
+    private val onProgramClick: (Int, Program) -> Unit,
+    private val onSelectionChanged: (Int, Program?) -> Unit,
     private val onOffsetChanged: () -> Unit,
 ) : RecyclerView.Adapter<GuideRowsAdapter.RowHolder>() {
 
@@ -34,6 +35,8 @@ class GuideRowsAdapter(
     private var viewport = 0
     private var contentStart = 0
     private var contentEnd = 0
+    private var selectedChannel = RecyclerView.NO_POSITION
+    private var selectedCell: Program? = null
     private val rows = ArrayList<RowHolder>()
 
     private val dayWidth get() = hourWidth * GuideDaysAdapter.HOURS_IN_DAY
@@ -51,6 +54,8 @@ class GuideRowsAdapter(
         channels = newChannels
         programs = newPrograms
         recomputeContentRange()
+        // The cells are rebuilt from scratch, so a selection from the previous data cannot survive.
+        clearSelection()
         notifyDataSetChanged()
     }
 
@@ -74,6 +79,77 @@ class GuideRowsAdapter(
     }
 
     fun hourWidthPx(): Int = hourWidth
+
+    /**
+     * Marks one cell as the current pick and reports it upwards, so the caller can fill the info
+     * panel and decide what a second activation should do. Only one cell is selected at a time.
+     */
+    fun select(channelPosition: Int, program: Program) {
+        if (isSelected(channelPosition, program)) return
+        selectedChannel = channelPosition
+        selectedCell = program
+        applySelection()
+        onSelectionChanged(channelPosition, program)
+    }
+
+    fun clearSelection() {
+        if (selectedChannel == RecyclerView.NO_POSITION && selectedCell == null) return
+        selectedChannel = RecyclerView.NO_POSITION
+        selectedCell = null
+        applySelection()
+        onSelectionChanged(RecyclerView.NO_POSITION, null)
+    }
+
+    fun isSelected(channelPosition: Int, program: Program): Boolean =
+        channelPosition == selectedChannel && program === selectedCell
+
+    fun selectedChannelPosition(): Int = selectedChannel
+
+    fun selectedProgram(): Program? = selectedCell
+
+    /**
+     * Hands input focus to the selected cell. Touch mode refuses focus for plain focusable views,
+     * so the cell has to ask for it in touch mode as well - otherwise OK would never reach it and
+     * there would be no way to confirm a pick with a remote.
+     */
+    fun requestFocusOnSelected() {
+        if (selectedChannel == RecyclerView.NO_POSITION) return
+        for (holder in rows) {
+            if (holder.channelPosition != selectedChannel) continue
+            val content = holder.content
+            for (index in 0 until content.childCount) {
+                val cell = content.getChildAt(index)
+                if (cell.tag !== selectedCell) continue
+                cell.isFocusableInTouchMode = true
+                cell.requestFocus()
+                return
+            }
+        }
+    }
+
+    /** Restyles the cells of the attached rows after the selection or the highlight changed. */
+    private fun applySelection() {
+        for (holder in rows) {
+            val content = holder.content
+            for (index in 0 until content.childCount) {
+                val cell = content.getChildAt(index)
+                val program = cell.tag as? Program ?: continue
+                val selected = isSelected(holder.channelPosition, program)
+                cell.setBackgroundResource(backgroundFor(program, selected))
+                cell.isSelected = selected
+                // Only the picked cell is focusable, so D-pad keeps its current job on the grid.
+                cell.isFocusable = selected
+                cell.isFocusableInTouchMode = selected
+            }
+        }
+    }
+
+    private fun backgroundFor(program: Program, selected: Boolean): Int = when {
+        selected -> R.drawable.bg_epg_selected
+        highlightCurrent && System.currentTimeMillis() in program.start until program.stop ->
+            R.drawable.bg_epg_now
+        else -> R.drawable.bg_epg_cell
+    }
 
     fun pixelForTime(time: Long): Int = ((time - dayStart) / 3_600_000f * hourWidth).toInt()
 
@@ -224,14 +300,14 @@ class GuideRowsAdapter(
                 (width - margin).coerceAtLeast(1),
                 ViewGroup.LayoutParams.MATCH_PARENT,
             )
+            // The programme travels with the cell as its tag, which is what lets a selection be
+            // restyled later without keeping a second map of every view.
+            cell.tag = program
             cell.findViewById<TextView>(R.id.program_title).text = program.title
             cell.findViewById<TextView>(R.id.program_time).text =
                 Fmt.time(program.start) + " - " + Fmt.time(program.stop)
-            val running = System.currentTimeMillis() in program.start until program.stop
-            cell.setBackgroundResource(
-                if (running && highlightCurrent) R.drawable.bg_epg_now else R.drawable.bg_epg_cell
-            )
-            cell.setOnClickListener { onProgramClick(holder.channelPosition) }
+            cell.setBackgroundResource(backgroundFor(program, isSelected(holder.channelPosition, program)))
+            cell.setOnClickListener { onProgramClick(holder.channelPosition, program) }
             content.addView(cell)
             cursor = start + width
         }

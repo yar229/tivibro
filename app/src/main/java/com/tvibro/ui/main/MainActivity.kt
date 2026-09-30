@@ -5,6 +5,8 @@ import android.content.Intent
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.text.StaticLayout
+import android.util.TypedValue
 import android.view.Choreographer
 import android.view.KeyEvent
 import android.view.LayoutInflater
@@ -61,6 +63,12 @@ class MainActivity : AppCompatActivity() {
     private lateinit var menuStrip: LinearLayout
     private lateinit var gridContainer: LinearLayout
     private lateinit var timeRuler: TimeRulerView
+    private lateinit var guideInfoPanel: LinearLayout
+    private lateinit var guideInfoProgramme: LinearLayout
+    private lateinit var guideInfoTitle: TextView
+    private lateinit var guideInfoTime: TextView
+    private lateinit var guideInfoDescription: TextView
+    private lateinit var guideInfoDescriptionTail: TextView
     private lateinit var nowLine: View
     private lateinit var emptyView: TextView
     private lateinit var statusText: TextView
@@ -85,6 +93,11 @@ class MainActivity : AppCompatActivity() {
     private var syncingRows = false
     private var lastSyncPosition = RecyclerView.NO_POSITION
     private var lastSyncTop = 0
+    private var restoreFocusPosition = RecyclerView.NO_POSITION
+    private var pendingDescription: String? = null
+    private var splitDescription = ""
+    private var splitDescriptionWidth = 0
+    private var splitHeadLines = 0
     private var dayStart = 0L
     private var dayIndex = 0
     private var leftStage = STAGE_CONTENT
@@ -122,13 +135,15 @@ class MainActivity : AppCompatActivity() {
         guideChannelsAdapter = GuideChannelsAdapter(
             onClick = { position -> onGuideChannelClick(position) },
             onLongClick = { position -> onChannelLongClick(position) },
+            onFocus = { onGuideChannelFocus() },
         )
         guideChannelsList.layoutManager = LinearLayoutManager(this)
         guideChannelsList.adapter = guideChannelsAdapter
 
         guideRowsAdapter = GuideRowsAdapter(
             hourWidthPx = resources.getDimensionPixelSize(R.dimen.epg_hour_width),
-            onProgramClick = { position -> onGuideChannelClick(position) },
+            onProgramClick = { position, program -> onGuideProgramClick(position, program) },
+            onSelectionChanged = { _, _ -> updateGuideInfo() },
             onOffsetChanged = {
                 positionNowLine()
                 timeRuler.setOffset(guideRowsAdapter.currentOffset())
@@ -176,6 +191,8 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         pendingFocus = true
+        // The panel font size can be changed while Settings is open on top of the guide.
+        applyGuideInfoFontScale()
         reload(autoPlay = firstResume && prefs.turnOnLastChannel)
         firstResume = false
     }
@@ -198,7 +215,23 @@ class MainActivity : AppCompatActivity() {
         menuStrip = findViewById(R.id.menu_strip)
         gridContainer = findViewById(R.id.grid_container)
         timeRuler = findViewById(R.id.time_ruler)
+        guideInfoPanel = findViewById(R.id.guide_info_panel)
+        guideInfoProgramme = findViewById(R.id.guide_info_programme)
+        guideInfoTitle = findViewById(R.id.guide_info_title)
+        guideInfoTime = findViewById(R.id.guide_info_time)
+        guideInfoDescription = findViewById(R.id.guide_info_description)
+        guideInfoDescriptionTail = findViewById(R.id.guide_info_description_tail)
         nowLine = findViewById(R.id.now_line)
+        // Captured after the global font scale is applied, so the base sizes are the real ones.
+        captureFontScale(guideInfoTitle) { prefs.infoPanelFont }
+        captureFontScale(guideInfoTime) { prefs.infoPanelFont }
+        captureFontScale(guideInfoDescription) { prefs.infoPanelFont }
+        captureFontScale(guideInfoDescriptionTail) { prefs.infoPanelFont }
+        // A longer or shorter title changes the room the description gets, so the split has to be
+        // redone whenever the panel is measured again.
+        guideInfoPanel.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> splitDescriptionNow() }
+        // The description head is laid out after the programme block, so both heights are final here.
+        guideInfoDescription.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> alignGuideDescriptionHead() }
         emptyView = findViewById(R.id.empty_view)
         statusText = findViewById(R.id.status_text)
         clockView = findViewById(R.id.clock)
@@ -251,6 +284,7 @@ class MainActivity : AppCompatActivity() {
         clockView.text = clockFormat.format(Date(now))
         clockDateView.text = dateFormat.format(Date(now))
         positionNowLine()
+        updateGuideInfo()
     }
 
     // ----------------------------------------------------------------- data
@@ -347,11 +381,22 @@ class MainActivity : AppCompatActivity() {
     private fun applyGuideData(channels: List<Channel>, programs: Map<Long, List<Program>>) {
         guideRowsAdapter.setData(channels, programs)
         programsList.doOnPreDraw { scrollTimelineToNow() }
+        // A picked cell disappears together with the old data, so hand focus back to the row it
+        // belonged to instead of leaving the remote with nothing to confirm.
+        if (restoreFocusPosition != RecyclerView.NO_POSITION) {
+            val position = restoreFocusPosition
+            restoreFocusPosition = RecyclerView.NO_POSITION
+            focusList(guideChannelsList, position)
+        }
     }
 
     private fun selectDay(index: Int) {
         val target = index.coerceIn(0, GUIDE_DAYS - 1)
         if (target == dayIndex) return
+        val picked = guideRowsAdapter.selectedChannelPosition()
+        if (picked != RecyclerView.NO_POSITION && programsList.hasFocus()) {
+            restoreFocusPosition = picked
+        }
         dayIndex = target
         dayStart = Fmt.startOfDay(System.currentTimeMillis()) + target * GuideDaysAdapter.DAY_MS
         daysAdapter.select(target)
@@ -394,6 +439,168 @@ class MainActivity : AppCompatActivity() {
         }
         nowLine.visible(true)
         nowLine.translationX = x.toFloat()
+    }
+
+    // ------------------------------------------------------------- info panel
+
+    /** Base sp sizes captured once, so re-applying a scale never compounds. */
+    private class FontScaledView(val view: TextView, val baseSp: Float, val scale: () -> Float)
+
+    private val fontScaledViews = mutableListOf<FontScaledView>()
+
+    private fun captureFontScale(view: TextView, scale: () -> Float) {
+        fontScaledViews += FontScaledView(view, view.textSize / resources.displayMetrics.scaledDensity, scale)
+    }
+
+    /** The guide panel follows the same "Info panel font size" setting as the player panel. */
+    private fun applyGuideInfoFontScale() {
+        for (item in fontScaledViews) {
+            item.view.setTextSize(TypedValue.COMPLEX_UNIT_SP, item.baseSp * item.scale())
+        }
+    }
+
+    /**
+     * Describes the programme the user is looking at. The pick wins when a cell was tapped,
+     * otherwise the panel follows the focused channel, so walking the list with a remote is enough
+     * to read what is on. The channel itself stays in the column on the left, so only the programme
+     * is repeated here.
+     */
+    private fun updateGuideInfo() {
+        if (!::guideInfoPanel.isInitialized) return
+        val channel = currentChannels.getOrNull(infoChannelPosition())
+        if (channel == null) {
+            guideInfoPanel.visible(false)
+            return
+        }
+        guideInfoPanel.visible(true)
+        val program = guideRowsAdapter.selectedProgram() ?: programAt(channel, guideFocusTime())
+        guideInfoTitle.text = program?.title ?: getString(R.string.no_programs)
+        val now = System.currentTimeMillis()
+        guideInfoTime.text = if (program == null) {
+            getString(R.string.no_information)
+        } else {
+            val range = Fmt.timeRange(program.start, program.stop, Locale.getDefault())
+            // Progress and a countdown only mean something while the programme is running.
+            if (now in program.start until program.stop) {
+                "$range · ${Fmt.percent(program.start, program.stop, now)}% · ${Fmt.remainingText(program.stop, now)}"
+            } else {
+                range
+            }
+        }
+        val description = program?.description.orEmpty()
+        fillGuideDescription(description)
+    }
+
+    /**
+     * Lays the description around the programme block: the first lines sit beside the title and the
+     * time, the rest continues underneath it across the full width. Android has no text flow around
+     * a float, so the text is cut at the line boundary the narrow column produces.
+     */
+    private fun fillGuideDescription(description: String) {
+        pendingDescription = description
+        splitDescriptionNow()
+    }
+
+    /**
+     * Splits the pending description. The column width follows the measured width of the programme
+     * block, so a new title is only cut correctly after the panel has been laid out again - hence
+     * this is called from the layout listener as well.
+     */
+    private fun splitDescriptionNow() {
+        val description = pendingDescription ?: return
+        val maxLines = prefs.switchDescriptionMaxLines
+        // The block holds a title line and a time line, so that is how much fits beside it.
+        val headLines = minOf(PROGRAMME_BLOCK_LINES, maxLines)
+        val width = guideDescriptionHeadWidth()
+        if (description.isEmpty()) {
+            guideInfoDescription.visible(false)
+            guideInfoDescription.text = ""
+            guideInfoDescriptionTail.visible(false)
+            guideInfoDescriptionTail.text = ""
+            splitDescription = ""
+            splitDescriptionWidth = 0
+            return
+        }
+        if (width <= 0) return
+        if (description == splitDescription && width == splitDescriptionWidth && headLines == splitHeadLines) {
+            return
+        }
+        val (first, rest) = cutAtLineBoundary(description, width, headLines)
+        splitDescription = description
+        splitDescriptionWidth = width
+        splitHeadLines = headLines
+        guideInfoDescription.visible(true)
+        guideInfoDescription.maxLines = headLines
+        guideInfoDescription.text = first
+        val tailLines = (maxLines - headLines).coerceAtLeast(0)
+        guideInfoDescriptionTail.maxLines = tailLines
+        guideInfoDescriptionTail.text = rest
+        guideInfoDescriptionTail.visible(tailLines > 0 && rest.isNotEmpty())
+    }
+
+    /** Width of the description column next to the programme block. */
+    private fun guideDescriptionHeadWidth(): Int {
+        val panel = guideInfoPanel
+        if (panel.width <= 0) return 0
+        val gap = resources.getDimensionPixelSize(R.dimen.spacing_lg)
+        return panel.width - panel.paddingStart - panel.paddingEnd - guideInfoProgramme.width - gap
+    }
+
+    /** Cuts [text] after [headLines] lines of a [width] wide column. */
+    private fun cutAtLineBoundary(text: String, width: Int, headLines: Int): Pair<String, String> {
+        val layout = StaticLayout.Builder.obtain(text, 0, text.length, guideInfoDescription.paint, width).build()
+        if (layout.lineCount <= headLines) return text to ""
+        // A line break can land between the halves of a surrogate pair, which would corrupt the text.
+        var cut = layout.getLineEnd(headLines - 1)
+        if (cut in 1 until text.length && Character.isHighSurrogate(text[cut - 1])) cut--
+        return text.substring(0, cut).trimEnd() to text.substring(cut).trimStart()
+    }
+
+    /**
+     * Head and programme block stand side by side, so the row is as tall as the taller of the two.
+     * When the block wins, the last line of the head floats above the tail that follows the row and
+     * the flow looks broken. Pushing the head down by that difference makes its last line the last
+     * line of the row, so the description keeps one grid on both sides of the title. Line heights of
+     * the title, the time and the description never match exactly, so the shift is measured, not
+     * guessed.
+     */
+    private fun alignGuideDescriptionHead() {
+        if (!::guideInfoDescription.isInitialized) return
+        val leftover = if (guideInfoDescriptionTail.visibility == View.VISIBLE) {
+            (guideInfoProgramme.height - guideInfoDescription.height).coerceAtLeast(0)
+        } else {
+            0
+        }
+        guideInfoDescription.translationY = leftover.toFloat()
+    }
+
+    /** Pick first, then the focused row, then the highlighted channel as a usable default. */
+    private fun infoChannelPosition(): Int {
+        val selected = guideRowsAdapter.selectedChannelPosition()
+        if (selected in currentChannels.indices) return selected
+        val focused = guideChannelsAdapter.focusedPosition()
+        if (focused in currentChannels.indices) return focused
+        val current = currentChannels.indexOfFirst { it.id == guideChannelsAdapter.currentId() }
+        return if (current >= 0) current else 0
+    }
+
+    private fun programAt(channel: Channel, time: Long): Program? {
+        val list = guidePrograms[channel.id].orEmpty()
+        return list.firstOrNull { time in it.start until it.stop }
+            ?: list.minByOrNull { kotlin.math.abs(it.start - time) }
+    }
+
+    /**
+     * Moment the panel describes: "now" while it is on screen, otherwise the left edge of the
+     * grid, which is then what the user is actually reading.
+     */
+    private fun guideFocusTime(): Long {
+        val now = System.currentTimeMillis()
+        val viewport = programsList.width
+        if (viewport <= 0) return now
+        val offset = guideRowsAdapter.currentOffset()
+        if (guideRowsAdapter.pixelForTime(now) in offset..(offset + viewport)) return now
+        return dayStart + (offset + 1).toLong() * 3_600_000L / guideRowsAdapter.hourWidthPx()
     }
 
     /**
@@ -440,6 +647,7 @@ class MainActivity : AppCompatActivity() {
     private fun showEmpty(message: String) {
         emptyView.text = message
         emptyView.visible(true)
+        updateGuideInfo()
     }
 
     // ---------------------------------------------------------------- events
@@ -447,6 +655,24 @@ class MainActivity : AppCompatActivity() {
     private fun onGuideChannelClick(position: Int) {
         val channel = currentChannels.getOrNull(position) ?: return
         openPlayerFor(channel, currentChannels)
+    }
+
+    private fun onGuideChannelFocus() {
+        updateGuideInfo()
+    }
+
+    /**
+     * A tap on a cell only marks the programme, a second activation of the same cell plays it.
+     * That keeps a plain tap from throwing the user into the player while still allowing a single
+     * pick to be read and confirmed.
+     */
+    private fun onGuideProgramClick(position: Int, program: Program) {
+        if (guideRowsAdapter.isSelected(position, program)) {
+            onGuideChannelClick(position)
+            return
+        }
+        guideRowsAdapter.select(position, program)
+        guideRowsAdapter.requestFocusOnSelected()
     }
 
     private fun autoPlayLastChannel() {
@@ -751,6 +977,7 @@ class MainActivity : AppCompatActivity() {
         guideRowsAdapter.setOffset(
             guideRowsAdapter.currentOffset() + hours * guideRowsAdapter.hourWidthPx()
         )
+        updateGuideInfo()
     }
 
     /**
@@ -770,6 +997,8 @@ class MainActivity : AppCompatActivity() {
      */
     private fun settleTimeline() {
         guideRowsAdapter.setViewport(programsList.width)
+        // The resting position decides which moment the panel describes.
+        updateGuideInfo()
         val from = guideRowsAdapter.currentOffset()
         val target = guideRowsAdapter.nearestPopulatedOffset() ?: return
         ValueAnimator.ofInt(from, target).apply {
@@ -1041,7 +1270,9 @@ class MainActivity : AppCompatActivity() {
         private const val STAGE_GROUPS = 1
         private const val STAGE_MENU = 2
         private const val TIMELINE_STEP_HOURS = 2
-        private const val NOW_LINE_MARGIN = 0.12f
+            private const val NOW_LINE_MARGIN = 0.12f
+            /** Title line plus time line: what the description has to flow around. */
+            private const val PROGRAMME_BLOCK_LINES = 2
         private const val MIN_FLING_PX_PER_SEC = 350f
         private const val FLING_DECAY = 0.95f
         private const val FOCUS_ATTEMPTS = 5

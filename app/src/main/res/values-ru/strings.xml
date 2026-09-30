@@ -666,7 +666,7 @@
     <string name="show_description_when_switching_channels_only">Показывать описание только при переключении каналов</string>
     <string name="channel_logo">Логотип канала</string>
     <string name="app_logo">Логотип приложения</string>
-    <string name="switch_desc_lines">Макс. строк описания передачи в инфо-попапе</string>
+    <string name="switch_desc_lines">Макс. кол-во строк описания передачи</string>
     <string-array name="buffer_entries">
         <item>@string/no_buffering</item>
         <item>Маленький</item>

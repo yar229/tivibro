@@ -200,6 +200,15 @@ class SettingsActivity : AppCompatActivity() {
                 get = { prefs.infoPanelFont.toString() },
                 set = { prefs.infoPanelFont = it.toFloatOrNull() ?: 1f },
             ))
+            // Shared by the player info panel and the guide info panel, so it lives with the
+            // appearance settings instead of inside the player group.
+            add(SettingItem.Number(
+                getString(R.string.switch_desc_lines),
+                min = 1,
+                max = 10,
+                get = { prefs.switchDescriptionMaxLines },
+                set = { prefs.switchDescriptionMaxLines = it },
+            ))
             add(SettingItem.Number(
                 getString(R.string.ui_transparency),
                 min = 20,
@@ -310,13 +319,6 @@ class SettingsActivity : AppCompatActivity() {
                 max = 30,
                 get = { prefs.switchDelay },
                 set = { prefs.switchDelay = it },
-            ))
-            add(SettingItem.Number(
-                getString(R.string.switch_desc_lines),
-                min = 1,
-                max = 10,
-                get = { prefs.switchDescriptionMaxLines },
-                set = { prefs.switchDescriptionMaxLines = it },
             ))
             add(SettingItem.Header(getString(R.string.player_interface)))
             add(switchItem(R.string.show_black_screen) { prefs.showBlackScreen })

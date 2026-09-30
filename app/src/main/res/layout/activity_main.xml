@@ -82,6 +82,83 @@
         </LinearLayout>
     </LinearLayout>
 
+    <!-- Programme details, a strip of its own above the guide: it must never cover the grid -->
+    <LinearLayout
+        android:id="@+id/guide_info_panel"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@color/bg_app"
+        android:orientation="vertical"
+        android:paddingStart="@dimen/spacing_lg"
+        android:paddingTop="@dimen/spacing_md"
+        android:paddingEnd="@dimen/spacing_lg"
+        android:paddingBottom="@dimen/spacing_md">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:baselineAligned="false"
+            android:gravity="top"
+            android:orientation="horizontal">
+
+            <LinearLayout
+                android:id="@+id/guide_info_programme"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/guide_info_title"
+                    style="@style/TvBro.Text.Title"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:maxWidth="@dimen/guide_info_title_width"
+                    android:textSize="@dimen/text_lg"
+                    tools:text="Live: Premier League" />
+
+                <TextView
+                    android:id="@+id/guide_info_time"
+                    style="@style/TvBro.Text.Time"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textSize="@dimen/text_sm"
+                    tools:text="20:15 - 21:00 · 62% · -0:23" />
+            </LinearLayout>
+
+            <!-- Head of the description: the lines that fit beside the programme -->
+            <TextView
+                android:id="@+id/guide_info_description"
+                style="@style/TvBro.Text.Subtitle"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="@dimen/spacing_lg"
+                android:layout_weight="1"
+                android:ellipsize="end"
+                android:maxLines="2"
+                android:textSize="@dimen/guide_info_description_text"
+                tools:text="Live coverage of the match from the commentary booth." />
+        </LinearLayout>
+
+        <!-- Tail of the description: continues under the programme, across the full width.
+             No top margin, otherwise the flow around the title shows a seam. -->
+        <TextView
+            android:id="@+id/guide_info_description_tail"
+            style="@style/TvBro.Text.Subtitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:textSize="@dimen/guide_info_description_text"
+            android:visibility="gone"
+            tools:text="booth, with interviews before and after the game." />
+
+        <!-- Separates the panel from the schedule below it -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginTop="@dimen/spacing_md"
+            android:background="@color/divider" />
+    </LinearLayout>
+
     <!-- Content: menu strip (left arrow twice) | groups (left arrow once) | guide -->
     <LinearLayout
         android:layout_width="match_parent"
