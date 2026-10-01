@@ -3,9 +3,13 @@ package com.tvibro
 import android.app.Activity
 import android.app.Application
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.content.res.Configuration
 import android.os.Bundle
 import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
+import com.tvibro.base.WakeReceiver
 import com.tvibro.data.Prefs
 import com.tvibro.data.db.TvBroRepository
 import com.tvibro.data.source.SourceManager
@@ -49,6 +53,15 @@ class TvBroApp : Application() {
         lastNightMode = resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK
         Notifications.createChannel(this)
         registerActivityLifecycleCallbacks(StartedCounter())
+        // ACTION_SCREEN_ON is an implicit broadcast that Android 8 no longer delivers to a
+        // manifest, so the boxes that report a wake only this way need it registered here. The
+        // receiver checks the setting itself, which keeps the preference free to change.
+        ContextCompat.registerReceiver(
+            this,
+            WakeReceiver(),
+            IntentFilter(Intent.ACTION_SCREEN_ON),
+            ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
     }
 
     private inner class StartedCounter : Application.ActivityLifecycleCallbacks {

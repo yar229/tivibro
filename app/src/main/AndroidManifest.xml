@@ -149,6 +149,15 @@
         </receiver>
 
         <receiver
+            android:name=".base.WakeReceiver"
+            android:enabled="true"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.USER_PRESENT" />
+            </intent-filter>
+        </receiver>
+
+        <receiver
             android:name=".base.ReminderReceiver"
             android:exported="false" />
 
