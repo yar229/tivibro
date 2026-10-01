@@ -1115,12 +1115,24 @@ captureFontScale(switchAudioCodec) { prefs.bottomPanelFont }
 
     private fun showInfo() {
         if (infoPanel.visibility == View.VISIBLE) {
-            infoPanel.visible(false)
+            closeInfoPanel()
             return
         }
+        // The info window is read at leisure, so the panels must not vanish under it: the hide
+        // timer is paused for as long as it is up and starts again once the user closes it.
+        panelTimeout = 0
         updateInfoPanel()
         infoPanel.visible(true)
         infoPanel.requestFocus()
+    }
+
+    /**
+     * Puts the info window away and gives the panels their hide timer back, so they disappear after
+     * the usual delay instead of staying up for the rest of the stream.
+     */
+    private fun closeInfoPanel() {
+        infoPanel.visible(false)
+        resetPanelTimeout()
     }
 
     private fun updateInfoPanel() {
@@ -1708,7 +1720,7 @@ captureFontScale(switchAudioCodec) { prefs.bottomPanelFont }
                     return true
                 }
                 if (infoPanel.visibility == View.VISIBLE) {
-                    infoPanel.visible(false)
+                    closeInfoPanel()
                     return true
                 }
                 if (osdPanel.visibility == View.VISIBLE || switchPanel.visibility == View.VISIBLE) {
