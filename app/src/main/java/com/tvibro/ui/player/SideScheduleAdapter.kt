@@ -8,6 +8,7 @@ import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 import com.tvibro.R
 import com.tvibro.base.Fmt
+import com.tvibro.base.pxPerSp
 import com.tvibro.data.model.Program
 
 class SideScheduleAdapter(
@@ -52,7 +53,7 @@ class SideScheduleAdapter(
 
     private fun applyScale(view: TextView, dimen: Int) {
         if (fontScale == 1f) return
-        view.setTextSize(TypedValue.COMPLEX_UNIT_SP, view.context.resources.getDimension(dimen) / view.context.resources.displayMetrics.scaledDensity * fontScale)
+        view.setTextSize(TypedValue.COMPLEX_UNIT_SP, view.context.resources.getDimension(dimen) / view.context.pxPerSp() * fontScale)
     }
 
     override fun onBindViewHolder(holder: Holder, position: Int) {

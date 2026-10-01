@@ -32,6 +32,7 @@ import coil.load
 import com.tvibro.R
 import com.tvibro.TvBroApp
 import com.tvibro.base.Fmt
+import com.tvibro.base.pxPerSp
 import com.tvibro.base.startActivitySafely
 import com.tvibro.base.toast
 import com.tvibro.base.visible
@@ -447,7 +448,7 @@ captureFontScale(switchAudioCodec) { prefs.bottomPanelFont }
     private val fontScaledViews = mutableListOf<FontScaledView>()
 
     private fun captureFontScale(view: TextView, scale: () -> Float) {
-        fontScaledViews += FontScaledView(view, view.textSize / resources.displayMetrics.scaledDensity, scale)
+        fontScaledViews += FontScaledView(view, view.textSize / pxPerSp(), scale)
     }
 
     private fun applyPanelFontScales() {

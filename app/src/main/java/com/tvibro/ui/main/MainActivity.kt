@@ -24,6 +24,7 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
+import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.doOnPreDraw
 import androidx.core.view.updateLayoutParams
@@ -32,6 +33,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.tvibro.R
 import com.tvibro.TvBroApp
 import com.tvibro.base.Fmt
+import com.tvibro.base.pxPerSp
 import com.tvibro.base.toast
 import com.tvibro.base.visible
 import com.tvibro.data.Prefs
@@ -164,6 +166,7 @@ class MainActivity : AppCompatActivity() {
         bindViews()
         buildMenuStrip()
         startClock()
+        setupBackHandling()
 
         // A touch screen has no Left key, so every visible column carries the button that opens the
         // next hidden one. The buttons stay out of the focus chain, the remote goes on using its keys.
@@ -651,7 +654,7 @@ class MainActivity : AppCompatActivity() {
     private val fontScaledViews = mutableListOf<FontScaledView>()
 
     private fun captureFontScale(view: TextView, scale: () -> Float) {
-        fontScaledViews += FontScaledView(view, view.textSize / resources.displayMetrics.scaledDensity, scale)
+        fontScaledViews += FontScaledView(view, view.textSize / pxPerSp(), scale)
     }
 
     /** The guide panel follows the same "Info panel font size" setting as the player panel. */
@@ -2058,55 +2061,52 @@ class MainActivity : AppCompatActivity() {
                 if (guideChannelsList.hasFocus()) return moveListFocus(guideChannelsList, 1, guideChannelsAdapter.focusedPosition())
                 if (groupsList.hasFocus()) return moveListFocus(groupsList, 1, groupsAdapter.selectedIndex())
             }
-            KeyEvent.KEYCODE_BACK -> {
-                if (leftStage != STAGE_CONTENT) {
-                    closeLeftColumn()
-                    return true
-                }
-                if (prefs.confirmExit) {
-                    val now = System.currentTimeMillis()
-                    if (now - lastExitPress < 2000) {
-                        finish()
-                    } else {
-                        lastExitPress = now
-                        toast(getString(R.string.press_again_to_exit))
-                    }
-                    return true
-                }
-            }
         }
         return super.onKeyDown(keyCode, event)
     }
 
-    override fun onBackPressed() {
-        if (leftStage != STAGE_CONTENT) {
-            closeLeftColumn()
-            return
-        }
-        // The picture in the strip is the only thing that can still be running here, and it is not
-        // focusable on purpose, so back is the way to get rid of it.
-        if (Playback.inGuide()) {
-            // A stream the guide started itself has to give the audio focus back as well.
-            if (guideEngine != null) {
-                stopGuidePlayback()
-            } else {
-                Playback.stop()
-                // The slot goes back to the sign of a television, the stream is really over now.
-                attachMiniPlayer()
+    /**
+     * One place decides what the back key does, in the order the windows stack up: the left column
+     * covers the guide, the picture in the strip is the only thing that can still be running, and
+     * only then does back mean leaving.
+     *
+     * The dispatcher rather than an `onBackPressed` override, which Android 13 deprecated in favour
+     * of exactly this and which the system back gesture needs anyway.
+     */
+    private fun setupBackHandling() {
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                if (leftStage != STAGE_CONTENT) {
+                    closeLeftColumn()
+                    return
+                }
+                // The picture in the strip is not focusable on purpose, so back is the way to get rid of it.
+                if (Playback.inGuide()) {
+                    // A stream the guide started itself has to give the audio focus back as well.
+                    if (guideEngine != null) {
+                        stopGuidePlayback()
+                    } else {
+                        Playback.stop()
+                        // The slot goes back to the sign of a television, the stream is over now.
+                        attachMiniPlayer()
+                    }
+                    return
+                }
+                if (!prefs.confirmExit) {
+                    // Nothing of this app is left to close, so the default takes the window away.
+                    isEnabled = false
+                    onBackPressedDispatcher.onBackPressed()
+                    return
+                }
+                val now = System.currentTimeMillis()
+                if (now - lastExitPress < 2000) {
+                    finish()
+                } else {
+                    lastExitPress = now
+                    toast(getString(R.string.press_again_to_exit))
+                }
             }
-            return
-        }
-        if (prefs.confirmExit) {
-            val now = System.currentTimeMillis()
-            if (now - lastExitPress < 2000) {
-                finish()
-            } else {
-                lastExitPress = now
-                toast(getString(R.string.press_again_to_exit))
-            }
-        } else {
-            super.onBackPressed()
-        }
+        })
     }
 
     @Deprecated("Deprecated in Java")

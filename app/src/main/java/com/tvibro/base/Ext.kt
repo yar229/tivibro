@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.Handler
 import android.os.Looper
+import android.util.TypedValue
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
@@ -179,6 +180,17 @@ fun View.marginDp(left: Int, top: Int, right: Int, bottom: Int) {
         setMargins((left * d).toInt(), (top * d).toInt(), (right * d).toInt(), (bottom * d).toInt())
     }
 }
+
+/**
+ * How many pixels one sp covers on this display.
+ *
+ * `DisplayMetrics.scaledDensity` is deprecated as of Android 14 and, on top of that, says nothing
+ * about the non-linear font scaling of that release. Asking [TypedValue] for a single sp accounts
+ * for whatever the system actually does, and a size that is captured in sp can be divided by this
+ * without drifting.
+ */
+fun Context.pxPerSp(): Float =
+    TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, 1f, resources.displayMetrics)
 
 fun View.visible(show: Boolean) {
     visibility = if (show) View.VISIBLE else View.GONE

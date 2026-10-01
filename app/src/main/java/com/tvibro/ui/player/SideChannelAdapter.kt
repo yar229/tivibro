@@ -10,6 +10,7 @@ import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 import coil.load
 import com.tvibro.R
+import com.tvibro.base.pxPerSp
 import com.tvibro.base.visible
 import com.tvibro.data.model.Channel
 
@@ -111,7 +112,7 @@ class SideChannelAdapter(
 
     private fun applyScale(view: TextView, dimen: Int) {
         if (fontScale == 1f) return
-        view.setTextSize(TypedValue.COMPLEX_UNIT_SP, view.context.resources.getDimension(dimen) / view.context.resources.displayMetrics.scaledDensity * fontScale)
+        view.setTextSize(TypedValue.COMPLEX_UNIT_SP, view.context.resources.getDimension(dimen) / view.context.pxPerSp() * fontScale)
     }
 
     fun getChannel(position: Int): Channel? = items.getOrNull(position)

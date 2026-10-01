@@ -10,6 +10,7 @@ import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.FrameLayout
+import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
 
 class WebActivity : AppCompatActivity() {
@@ -52,10 +53,19 @@ class WebActivity : AppCompatActivity() {
         title = intent.getStringExtra(EXTRA_TITLE).orEmpty()
         val url = intent.getStringExtra(EXTRA_URL).orEmpty()
         if (url.isNotBlank()) webView.loadUrl(url)
-    }
-
-    override fun onBackPressed() {
-        if (webView.canGoBack()) webView.goBack() else super.onBackPressed()
+        // Back walks the history of the page first and closes the window only when there is nothing
+        // left to go back to. The dispatcher instead of an `onBackPressed` override, which Android
+        // 13 deprecated in favour of exactly this and which the system back gesture needs anyway.
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                if (!webView.canGoBack()) {
+                    isEnabled = false
+                    onBackPressedDispatcher.onBackPressed()
+                    return
+                }
+                webView.goBack()
+            }
+        })
     }
 
     override fun onDestroy() {
