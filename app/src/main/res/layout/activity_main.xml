@@ -223,7 +223,7 @@
 
         <LinearLayout
             android:id="@+id/groups_column"
-            android:layout_width="@dimen/card_size"
+            android:layout_width="@dimen/groups_column_width"
             android:layout_height="match_parent"
             android:background="@drawable/osd_scrim_top"
             android:orientation="vertical"

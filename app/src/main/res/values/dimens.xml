@@ -47,6 +47,9 @@
     <dimen name="guide_channel_column">168dp</dimen>
     <dimen name="epg_cell_margin">1dp</dimen>
     <dimen name="epg_ruler_height">26dp</dimen>
+    <!-- Group names are the longest text of the left columns and mostly come from a playlist
+         abroad, so the column gets more room than the channel list next to it. -->
+    <dimen name="groups_column_width">190dp</dimen>
     <!-- 15% below text_lg: two description lines still have to cover the title plus time block -->
     <dimen name="guide_info_description_text">17sp</dimen>
     <!-- Cap for the programme block of the guide info panel, so the description keeps its room -->
