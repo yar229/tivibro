@@ -1,7 +1,12 @@
 package com.tvibro.ui.main
 
 import android.animation.ValueAnimator
+import android.content.Context
 import android.content.Intent
+import android.media.AudioFocusRequest
+import android.media.AudioManager
+import android.media.AudioAttributes as AndroidAudioAttributes
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -41,6 +46,8 @@ import com.tvibro.ui.main.guide.GuideRowsAdapter
 import com.tvibro.ui.main.guide.TimeRulerView
 import com.tvibro.ui.pin.PinActivity
 import com.tvibro.ui.player.Playback
+import com.tvibro.ui.player.PlaybackEngine
+import com.tvibro.ui.player.PlaybackEngineFactory
 import com.tvibro.ui.player.PlayerActivity
 import com.tvibro.ui.playlist.PlaylistWizardActivity
 import com.tvibro.ui.search.SearchActivity
@@ -87,6 +94,12 @@ class MainActivity : AppCompatActivity() {
     // A whole day of EPG for a large group is a heavy query, it must not block channel loading
     private val guideExecutor = Executors.newSingleThreadExecutor { r -> Thread(r, "tvibro-guide").apply { isDaemon = true } }
     private val main = Handler(Looper.getMainLooper())
+
+    /** The engine the guide started itself, as opposed to one handed over by the full screen player. */
+    private var guideEngine: PlaybackEngine? = null
+    private var guideFocusRequest: AudioFocusRequest? = null
+    /** A link is being resolved for the strip, so a second press must not start a second stream. */
+    private var guideLaunchPending = false
 
     private var categories: List<Category> = emptyList()
     private var currentChannels: List<Channel> = emptyList()
@@ -311,7 +324,7 @@ class MainActivity : AppCompatActivity() {
      */
     override fun onStop() {
         super.onStop()
-        if (Playback.inGuide() && !TvBroApp.get().inForeground) Playback.stop()
+        if (Playback.inGuide() && !TvBroApp.get().inForeground) stopGuidePlayback()
     }
 
     override fun onDestroy() {
@@ -320,7 +333,8 @@ class MainActivity : AppCompatActivity() {
         guideExecutor.shutdownNow()
         main.removeCallbacksAndMessages(null)
         playerLaunched = false
-        if (Playback.inGuide()) Playback.stop()
+        if (guideEngine != null) stopGuidePlayback() else if (Playback.inGuide()) Playback.stop()
+        releaseGuideAudioFocus()
     }
 
     // ------------------------------------------------------------------ setup
@@ -771,9 +785,13 @@ class MainActivity : AppCompatActivity() {
     private fun expandMiniPlayer() {
         val id = Playback.channelId()
         if (id <= 0L) return
+        // From here on the player owns the stream: the guide must no longer tear it down when it
+        // stops, and the focus it was holding is the player's business now.
+        guideEngine = null
+        releaseGuideAudioFocus()
         val index = currentChannels.indexOfFirst { it.id == id }
         if (index >= 0) {
-            play(currentChannels[index], currentChannels)
+            play(currentChannels[index], currentChannels, stayInGuide = false)
             return
         }
         // The stream belongs to another category, so the list of the guide cannot describe it: the
@@ -919,7 +937,137 @@ class MainActivity : AppCompatActivity() {
         play(channel, channelList)
     }
 
-    private fun play(channel: Channel, channelList: List<Channel> = currentChannels) {
+    /**
+     * "Stay on guide": the stream starts inside the strip of the guide instead of taking the whole
+     * screen, so the programme list stays readable while the channel plays. Pressing the very same
+     * channel again expands it, which is [expandMiniPlayer].
+     */
+    private fun playInGuide(channel: Channel) {
+        // The channel is already running in the strip: this is the second press, so the user is
+        // asking for the full screen player.
+        if (Playback.active() && Playback.channelId() == channel.id) {
+            expandMiniPlayer()
+            return
+        }
+        if (guideLaunchPending) return
+        guideLaunchPending = true
+        // Resolving a Stalker link is a portal request, so it cannot happen on the main thread.
+        executor.execute {
+            val playlist = runCatching { repo.playlist(channel.playlistId) }.getOrNull()
+            // Without a playlist the template cannot be filled in, exactly as in the full screen player.
+            val url = if (playlist == null) channel.url
+            else runCatching { TvBroApp.get().sources.streamUrl(playlist, channel) }.getOrDefault(channel.url)
+            main.post {
+                guideLaunchPending = false
+                if (isFinishing || isDestroyed) return@post
+                if (url.isBlank()) {
+                    toast(getString(R.string.channel_is_unavailable))
+                    return@post
+                }
+                startGuidePlayback(channel, playlist?.userAgent.orEmpty(), url)
+            }
+        }
+    }
+
+    private fun startGuidePlayback(channel: Channel, userAgent: String, url: String) {
+        // A tuner serves one channel at a time, so whatever ran before has to let go first.
+        Playback.stop()
+        requestGuideAudioFocus()
+        Playback.markChannel(channel.id, channel.name)
+        val created = PlaybackEngineFactory.create(prefs, guideInfoPlayer)
+        guideEngine = created
+        Playback.claimInGuide(created, guideInfoPlayer)
+        guideInfoPlayer.getChildAt(0)?.isFocusable = false
+        guideInfoPlayer.setOnClickListener { expandMiniPlayer() }
+        // The picture is on its way in, the sign of a television has nothing left to announce.
+        guideInfoPlaceholder.visible(false)
+        wireGuideEngine(created)
+        created.setVolume(1f)
+        runCatching { created.prepare(url, userAgent, 0L) }
+            .onFailure { failGuidePlayback(it) }
+    }
+
+    /**
+     * The guide has no OSD and no switch panel, so the callbacks of the mini player only have to
+     * keep the strip honest: report a failure, and let the engine go when the stream ends or the
+     * guide is no longer the one that started it.
+     */
+    private fun wireGuideEngine(created: PlaybackEngine) {
+        created.onReady = { main.post { attachMiniPlayer() } }
+        created.onError = { error ->
+            main.post {
+                toast(error.ifBlank { getString(R.string.playback_failed) }, long = true)
+                stopGuidePlayback()
+            }
+        }
+        created.onEnd = { main.post { stopGuidePlayback() } }
+        // The panel takes its size from the video aspect, which only arrives with the first frame.
+        created.onVideoSize = { _, _ -> main.post { applyGuideInfoPanelSize() } }
+    }
+
+    private fun failGuidePlayback(t: Throwable) {
+        toast(t.message?.takeIf { it.isNotBlank() } ?: getString(R.string.channel_is_unavailable))
+        stopGuidePlayback()
+    }
+
+    /** Stops a stream the guide started itself and gives the strip back its placeholder. */
+    private fun stopGuidePlayback() {
+        if (guideEngine == null) return
+        guideEngine = null
+        Playback.stop()
+        releaseGuideAudioFocus()
+        attachMiniPlayer()
+    }
+
+    /**
+     * Audio focus is what keeps the sound of the strip alive after the guide is on top again, so
+     * the guide asks for it as long as it owns the stream and hands it back when it does not.
+     */
+    private fun requestGuideAudioFocus() {
+        val manager = getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
+        runCatching {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val request = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
+                    .setAudioAttributes(
+                        AndroidAudioAttributes.Builder()
+                            .setUsage(AndroidAudioAttributes.USAGE_MEDIA)
+                            .setContentType(AndroidAudioAttributes.CONTENT_TYPE_MOVIE)
+                            .build()
+                    )
+                    .build()
+                guideFocusRequest = request
+                manager.requestAudioFocus(request)
+            } else {
+                @Suppress("DEPRECATION")
+                manager.requestAudioFocus(null, AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN)
+            }
+        }
+    }
+
+    private fun releaseGuideAudioFocus() {
+        val request = guideFocusRequest ?: return
+        guideFocusRequest = null
+        val manager = getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
+        runCatching {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                manager.abandonAudioFocusRequest(request)
+            }
+        }
+    }
+
+    /**
+     * @param stayInGuide false when the full screen player is what the user asked for, so this
+     * call must not fall back into the strip again.
+     */
+    private fun play(
+        channel: Channel,
+        channelList: List<Channel> = currentChannels,
+        stayInGuide: Boolean = true,
+    ) {
+        if (stayInGuide && prefs.stayOnGuide) {
+            playInGuide(channel)
+            return
+        }
         val intent = Intent(this, PlayerActivity::class.java)
             .putExtra(PlayerActivity.EXTRA_CHANNEL_ID, channel.id)
             .putExtra(
@@ -1938,9 +2086,14 @@ class MainActivity : AppCompatActivity() {
         // The picture in the strip is the only thing that can still be running here, and it is not
         // focusable on purpose, so back is the way to get rid of it.
         if (Playback.inGuide()) {
-            Playback.stop()
-            // The slot goes back to the sign of a television, the stream is really over now.
-            attachMiniPlayer()
+            // A stream the guide started itself has to give the audio focus back as well.
+            if (guideEngine != null) {
+                stopGuidePlayback()
+            } else {
+                Playback.stop()
+                // The slot goes back to the sign of a television, the stream is really over now.
+                attachMiniPlayer()
+            }
             return
         }
         if (prefs.confirmExit) {

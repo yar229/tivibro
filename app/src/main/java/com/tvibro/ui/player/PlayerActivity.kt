@@ -622,27 +622,9 @@ captureFontScale(switchAudioCodec) { prefs.bottomPanelFont }
     }
 
     private fun createEngine(preferVlc: Boolean): PlaybackEngine {
-        if (preferVlc) {
-            try {
-                // The VLC surface outlives this window when the stream moves into the guide panel,
-                // so it is built with the application context and cannot keep this activity alive.
-                val vlc = VlcEngine(TvBroApp.get(), engineHolder)
-                exoEngine = null
-                return vlc
-            } catch (t: Throwable) {
-                Log.e("TvibroPlayer", "VLC init failed, falling back to ExoPlayer", t)
-                engineHolder.removeAllViews()
-            }
-        }
-        val exo = ExoEngine(
-            this, engineHolder,
-            bufferMs = prefs.bufferSizeMs,
-            tunneled = prefs.tunneledPlayback,
-        )
-        exo.setPassthrough(prefs.audioPassthrough)
-        exo.setHardwareDecoder(prefs.videoDecoder != "software")
-        exoEngine = exo
-        return exo
+        val created = PlaybackEngineFactory.create(prefs, engineHolder, preferVlc)
+        exoEngine = created as? ExoEngine
+        return created
     }
 
     /**
