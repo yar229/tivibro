@@ -34,6 +34,7 @@ import com.tvibro.data.db.TvBroRepository
 import com.tvibro.data.model.Channel
 import com.tvibro.data.model.ChannelFilter
 import com.tvibro.data.model.Program
+import com.tvibro.data.source.EpgProgress
 import com.tvibro.ui.common.Dialogs
 import com.tvibro.ui.main.guide.GuideChannelsAdapter
 import com.tvibro.ui.main.guide.GuideDaysAdapter
@@ -82,6 +83,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var nowLine: View
     private lateinit var emptyView: TextView
     private lateinit var statusText: TextView
+    private lateinit var statusEpg: TextView
     private lateinit var clockView: TextView
     private lateinit var clockDateView: TextView
     private lateinit var titleView: TextView
@@ -217,15 +219,52 @@ class MainActivity : AppCompatActivity() {
         // A stream that the full screen player handed over keeps running, so the panel has to pick
         // the picture up again every time the guide comes back on top.
         attachMiniPlayer()
+        watchEpgProgress()
         reload(autoPlay = firstResume && prefs.turnOnLastChannel)
         firstResume = false
     }
 
     override fun onPause() {
         super.onPause()
+        // The line belongs to this window only: a background update keeps running, but nothing
+        // here is left to show it in.
+        TvBroApp.get().sources.stopWatching()
+        statusEpg.visible(false)
         // Only the picture this screen owns is parked here. A stream that is on its way into the
         // player window must not be touched, the player starts playing it by itself.
         if (Playback.inGuide()) Playback.pause()
+    }
+
+    /**
+     * The EPG update is normally started somewhere else, by the settings screen or by the worker,
+     * and it outlives this window. The line therefore only listens to what the manager publishes
+     * and gets the current state at once, so coming back to the guide does not lose a running update.
+     */
+    private fun watchEpgProgress() {
+        TvBroApp.get().sources.watch { progress -> showEpgProgress(progress) }
+    }
+
+    private fun showEpgProgress(progress: EpgProgress?) {
+        if (progress == null) {
+            statusEpg.visible(false)
+            return
+        }
+        // The file is read while it arrives and the programmes go straight into the database, so
+        // there is no state between "downloading" and "parsing": what grows on screen is the
+        // number of channels of the playlist that are already in.
+        if (progress.channelsTotal <= 0) {
+            statusEpg.text = getString(R.string.epg_updating)
+            statusEpg.visible(true)
+            return
+        }
+        val source = progress.label.ifBlank { getString(R.string.epg_updating) }
+        statusEpg.text = getString(
+            R.string.epg_progress_line,
+            source,
+            getString(R.string.epg_stage_parse),
+            getString(R.string.epg_progress_channels, progress.channels, progress.channelsTotal),
+        )
+        statusEpg.visible(true)
     }
 
     /**
@@ -297,6 +336,7 @@ class MainActivity : AppCompatActivity() {
         attachMiniPlayer()
         emptyView = findViewById(R.id.empty_view)
         statusText = findViewById(R.id.status_text)
+        statusEpg = findViewById(R.id.status_epg)
         clockView = findViewById(R.id.clock)
         clockDateView = findViewById(R.id.clock_date)
         titleView = findViewById(R.id.title)

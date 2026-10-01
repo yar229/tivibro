@@ -3,6 +3,7 @@ package com.tvibro.data.source
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import com.tvibro.data.db.TvBroRepository
 import com.tvibro.data.model.Channel
 import com.tvibro.data.model.ChannelFilter
@@ -14,6 +15,18 @@ import java.util.Locale
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 
+/**
+ * How far an EPG update has got for the source that is running right now, counted in channels of
+ * the playlist. There is no separate state for the file coming in: the archive is read while it
+ * arrives and the programmes go straight into the database, so "downloading" is the same work as
+ * "parsing" and telling them apart would say nothing about how far the update has come.
+ */
+data class EpgProgress(
+    val label: String,
+    val channels: Int = 0,
+    val channelsTotal: Int = 0,
+)
+
 class SourceManager(context: Context) {
 
     private val repo = TvBroRepository.get(context)
@@ -22,6 +35,24 @@ class SourceManager(context: Context) {
     private val main = Handler(Looper.getMainLooper())
 
     val isRunning: Boolean get() = running.get()
+
+    // A screen that did not start the update itself still follows it through this. It is read on
+    // the main thread, so a screen that has gone away is never called back into.
+    @Volatile
+    private var observer: ((EpgProgress?) -> Unit)? = null
+
+    fun watch(progress: (EpgProgress?) -> Unit) {
+        observer = progress
+    }
+
+    fun stopWatching() {
+        observer = null
+    }
+
+    private fun publish(progress: EpgProgress?) {
+        if (observer == null) return
+        onMain { observer?.invoke(progress) }
+    }
 
     // Work runs on the update thread, callbacks are always delivered on the main
     // thread so callers can touch dialogs, toasts and adapters directly.
@@ -89,7 +120,8 @@ class SourceManager(context: Context) {
     fun loadEpgFor(
         playlist: Playlist,
         channels: List<Channel>? = null,
-        onProgress: ((String) -> Unit)? = null,
+        onProgress: ((EpgProgress) -> Unit)? = null,
+        onError: ((String) -> Unit)? = null,
     ): Map<Long, List<Program>> {
         val sources = repo.epgSourcesForAny(playlist.id)
         val urls = LinkedHashMap<String, Long?>()
@@ -116,21 +148,41 @@ class SourceManager(context: Context) {
         val result = HashMap<Long, MutableList<Program>>()
 
         urls.forEach { (url, sourceId) ->
-            onProgress?.invoke(sourceId?.let { namesById[it] } ?: playlist.name)
+            val label = sourceId?.let { namesById[it] } ?: playlist.name
+            onProgress?.invoke(EpgProgress(label, 0, list.size))
             try {
-                val res = Http.get(url, playlist.userAgent, readTimeoutMs = 120000)
-                if (!res.ok) return@forEach
-                val parsed = XmltvParser(storeDescriptions = true).parse(res.body.inputStream())
-                parsed.programmes.forEach { p ->
-                    val key = p.tvgId.trim().lowercase(Locale.US)
-                    val channel = byId[key] ?: byName[key] ?: return@forEach
-                    if (p.stop <= from || p.start >= to) return@forEach
-                    p.channelId = channel.id
-                    result.getOrPut(p.channelId) { ArrayList() } += p
+                // The file is read while it downloads and the parser keeps only the channels of
+                // this playlist: a full EPG archive is far too big to hold in memory twice.
+                Http.openStream(
+                    url,
+                    playlist.userAgent,
+                    readTimeoutMs = 120000,
+                ).use { input ->
+                    val filled = HashSet<Long>()
+                    XmltvParser(
+                        storeDescriptions = true,
+                        acceptChannel = { key -> byId.containsKey(key) || byName.containsKey(key) },
+                        onProgramme = { p ->
+                            val key = p.tvgId.trim().lowercase(Locale.US)
+                            val channel = byId[key] ?: byName[key]
+                            if (channel != null && p.stop > from && p.start < to) {
+                                p.channelId = channel.id
+                                result.getOrPut(p.channelId) { ArrayList() } += p
+                                // Only a channel that was not filled yet changes the number, which
+                                // keeps the callback down to one call per channel of the playlist.
+                                if (filled.add(channel.id)) {
+                                    onProgress?.invoke(EpgProgress(label, filled.size, list.size))
+                                }
+                            }
+                        }
+                    ).parse(input)
                 }
                 sourceId?.let { repo.setEpgSourceLastUpdate(it, System.currentTimeMillis()) }
             } catch (e: Exception) {
-                // skip broken source, keep the rest
+                // The other sources are still worth trying, but a source that quietly fails looks
+                // exactly like a playlist that has no EPG at all, so the reason has to leave here.
+                Log.w(TAG, "EPG source failed: $url", e)
+                onError?.invoke("${playlist.name}: ${e.message ?: e.javaClass.simpleName}")
             }
         }
 
@@ -146,21 +198,35 @@ class SourceManager(context: Context) {
         executor.execute {
             running.set(true)
             val playlist = repo.playlist(playlistId)
-            val count = if (playlist == null) 0 else loadEpgFor(playlist).values.sumOf { it.size }
+            val count = if (playlist == null) 0 else loadEpgFor(
+                playlist,
+                onProgress = { publish(it) },
+            ).values.sumOf { it.size }
             running.set(false)
+            publish(null)
             onMain { onDone(count) }
         }
     }
 
-    fun refreshAllEpg(onProgress: (String) -> Unit = {}, onDone: (Int) -> Unit) {
+    fun refreshAllEpg(onProgress: (EpgProgress) -> Unit = {}, onDone: (Int, String?) -> Unit) {
         executor.execute {
             running.set(true)
             var total = 0
+            val failures = ArrayList<String>()
             repo.playlists(onlyEnabled = true).forEach { playlist ->
-                total += loadEpgFor(playlist) { onProgress(it) }.values.sumOf { it.size }
+                total += loadEpgFor(
+                    playlist,
+                    onProgress = { local ->
+                        publish(local)
+                        onProgress(local)
+                    },
+                    onError = { failures += it },
+                ).values.sumOf { it.size }
             }
             running.set(false)
-            onMain { onDone(total) }
+            val reason = failures.take(3).joinToString("; ").ifEmpty { null }
+            publish(null)
+            onMain { onDone(total, reason) }
         }
     }
 
@@ -261,5 +327,9 @@ class SourceManager(context: Context) {
         PlaylistType.XTREAM -> apiFor(playlist).streamUrl(channel)
         PlaylistType.STALKER -> StalkerApi.createLink(playlist, channel)
         else -> channel.url
+    }
+
+    private companion object {
+        const val TAG = "TvBroSources"
     }
 }

@@ -11,6 +11,7 @@ import androidx.work.workDataOf
 import com.tvibro.Notifications
 import com.tvibro.R
 import com.tvibro.TvBroApp
+import com.tvibro.data.source.EpgProgress
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.coroutines.resume
@@ -23,24 +24,35 @@ class EpgUpdateWorker(context: Context, params: WorkerParameters) : CoroutineWor
 
         setForeground(foregroundInfo(applicationContext.getString(R.string.epg_update_started)))
 
-        val count = withTimeoutOrNull(TIMEOUT_MS) {
-            suspendCancellableCoroutine<Int> { cont ->
+        val outcome = withTimeoutOrNull(TIMEOUT_MS) {
+            suspendCancellableCoroutine<Pair<Int, String?>> { cont ->
                 app.sources.refreshAllEpg(
-                    onProgress = { label -> notifySource(label) },
-                    onDone = { if (cont.isActive) cont.resume(it) },
+                    onProgress = { progress ->
+                        notifySource(progress)
+                    },
+                    onDone = { count, error -> if (cont.isActive) cont.resume(count to error) },
                 )
             }
         } ?: return Result.retry()
 
-        Notifications.showEpgUpdated(applicationContext, count)
-        return Result.success(workDataOf(KEY_COUNT to count))
+        Notifications.showEpgUpdated(applicationContext, outcome.first, outcome.second)
+        return Result.success(workDataOf(KEY_COUNT to outcome.first))
     }
 
-    private fun notifySource(label: String) {
-        val text = if (label.isBlank()) {
-            applicationContext.getString(R.string.epg_update_started)
+    private fun notifySource(progress: EpgProgress) {
+        // The same line the guide shows: the file is read while it arrives, so the only number
+        // that means anything is how many channels of the playlist are already there.
+        val text = if (progress.channelsTotal > 0) {
+            applicationContext.getString(
+                R.string.epg_progress_line,
+                progress.label.ifBlank { applicationContext.getString(R.string.epg_updating) },
+                applicationContext.getString(R.string.epg_stage_parse),
+                applicationContext.getString(
+                    R.string.epg_progress_channels, progress.channels, progress.channelsTotal
+                ),
+            )
         } else {
-            applicationContext.getString(R.string.epg_update_source, label)
+            applicationContext.getString(R.string.epg_update_started)
         }
         runCatching { setForegroundAsync(foregroundInfo(text)) }
     }

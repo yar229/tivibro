@@ -39,6 +39,52 @@ object Http {
         readTimeoutMs: Int = 30000,
         maxRedirects: Int = 5,
     ): Result {
+        val conn = connectGet(url, userAgent, headers, connectTimeoutMs, readTimeoutMs, maxRedirects)
+        val code = conn.responseCode
+        val stream: InputStream? =
+            if (code in 200..299) conn.inputStream else conn.errorStream
+        val body = stream?.use { readAll(it, conn.contentEncoding) } ?: ByteArray(0)
+        val hdr = conn.headerFields.filterKeys { it != null }
+            .mapKeys { it.key!! }
+        val result = Result(code, body, conn.url.toString(), hdr)
+        conn.disconnect()
+        return result
+    }
+
+    /**
+     * Hands out the response while it is still downloading, which is the only way through an EPG
+     * archive that unpacks to hundreds of megabytes. A gzip archive served as a file is unpacked on
+     * the fly: such hosts answer with a x-gzip content type and no content encoding header, so the
+     * magic bytes have to be looked at as well. Closing the stream closes the connection.
+     */
+    @Throws(Exception::class)
+    fun openStream(
+        url: String,
+        userAgent: String? = null,
+        headers: Map<String, String> = emptyMap(),
+        connectTimeoutMs: Int = 20000,
+        readTimeoutMs: Int = 30000,
+        maxRedirects: Int = 5,
+    ): InputStream {
+        val conn = connectGet(url, userAgent, headers, connectTimeoutMs, readTimeoutMs, maxRedirects)
+        val code = conn.responseCode
+        if (code !in 200..299) {
+            conn.disconnect()
+            throw HttpException(code, "HTTP $code")
+        }
+        return decoded(BufferedInputStream(conn.inputStream), conn.contentEncoding)
+    }
+
+    /** Follows the redirects by hand, because the status has to be known before the body is read. */
+    @Throws(Exception::class)
+    private fun connectGet(
+        url: String,
+        userAgent: String?,
+        headers: Map<String, String>,
+        connectTimeoutMs: Int,
+        readTimeoutMs: Int,
+        maxRedirects: Int,
+    ): HttpURLConnection {
         var current = url
         var redirects = 0
         while (true) {
@@ -54,15 +100,21 @@ object Http {
                 current = URL(URL(current), location).toString()
                 continue
             }
-            val stream: InputStream? =
-                if (code in 200..299) conn.inputStream else conn.errorStream
-            val body = stream?.use { readAll(it, conn.contentEncoding) } ?: ByteArray(0)
-            val hdr = conn.headerFields.filterKeys { it != null }
-                .mapKeys { it.key!! }
-            val result = Result(code, body, current, hdr)
-            conn.disconnect()
-            return result
+            return conn
         }
+    }
+
+    private fun decoded(stream: BufferedInputStream, contentEncoding: String?): InputStream {
+        val encoding = contentEncoding?.lowercase()
+        if (encoding != null) {
+            if (encoding.contains("gzip")) return GZIPInputStream(stream)
+            if (encoding.contains("deflate")) return InflaterInputStream(stream)
+        }
+        stream.mark(2)
+        val first = stream.read()
+        val second = stream.read()
+        stream.reset()
+        return if (first == 0x1f && second == 0x8b) GZIPInputStream(stream) else stream
     }
 
     @Throws(Exception::class)

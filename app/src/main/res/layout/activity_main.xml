@@ -226,7 +226,8 @@
             android:layout_width="@dimen/card_size"
             android:layout_height="match_parent"
             android:background="@drawable/osd_scrim_top"
-            android:orientation="vertical">
+            android:orientation="vertical"
+            android:visibility="gone">
 
             <!-- Touch has no Left key, so the column carries the button that peels the next one
                  open. It is hidden once there is nothing left to show. -->
@@ -410,5 +411,14 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="@string/press_ok_to_turn_on" />
+
+        <TextView
+            android:id="@+id/status_epg"
+            style="@style/TvBro.Text.Time"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="@dimen/spacing_lg"
+            android:visibility="gone"
+            tools:text="Обновление EPG: разбор — 40% 12/316 каналов" />
     </LinearLayout>
 </LinearLayout>

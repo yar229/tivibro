@@ -55,16 +55,22 @@ object Notifications {
         manager.notify(channelName.hashCode(), notification)
     }
 
-    fun showEpgUpdated(context: Context, count: Int) {
+    fun showEpgUpdated(context: Context, count: Int, error: String? = null) {
         val intent = Intent(context, MainActivity::class.java)
         val pending = PendingIntent.getActivity(
             context, ID_UPDATE_DONE, intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
+        val text = if (error.isNullOrBlank()) {
+            context.getString(R.string.epg_update_done, count)
+        } else {
+            context.getString(R.string.epg_update_done_failed, count, error)
+        }
         val notification = NotificationCompat.Builder(context, CHANNEL_UPDATES)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(context.getString(R.string.update_epg))
-            .setContentText(context.getString(R.string.epg_update_done, count))
+            .setContentText(text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
             .setAutoCancel(true)
             .setContentIntent(pending)
             .setPriority(NotificationCompat.PRIORITY_LOW)
