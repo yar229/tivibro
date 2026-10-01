@@ -668,7 +668,8 @@ class MainActivity : AppCompatActivity() {
         val program = guideRowsAdapter.selectedProgram()
             ?: guideRowsAdapter.focusedProgram()
             ?: programAt(channel, guideFocusTime())
-        guideInfoTitle.text = program?.title ?: getString(R.string.no_programs)
+        // A stand-in cell has no title of its own, and a blank line in the panel would read as a bug.
+        guideInfoTitle.text = program?.title?.takeIf { it.isNotBlank() } ?: getString(R.string.no_programs)
         val now = System.currentTimeMillis()
         if (program == null) {
             guideInfoTime.text = getString(R.string.no_information)
@@ -1350,7 +1351,14 @@ class MainActivity : AppCompatActivity() {
             return
         }
         guideRowsAdapter.requestFocusOnCell(position, program)
-        if (attempts <= 0) return
+        if (attempts <= 0) {
+            // The row never came up. The target has to be dropped here: left in place it tells
+            // everyone that a focus is still being answered, and the crosshair guard that would
+            // bring the remote back skips its work for exactly as long as the target is there.
+            focusTargetProgram = null
+            focusTargetChannel = RecyclerView.NO_POSITION
+            return
+        }
         main.postDelayed({ applyPendingFocus(attempts - 1) }, FOCUS_RETRY_MS)
     }
 

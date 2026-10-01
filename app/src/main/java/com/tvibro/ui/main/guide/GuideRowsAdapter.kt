@@ -54,6 +54,8 @@ class GuideRowsAdapter(
     /** Spare cells kept for the next rebuild: inflating them again on every scroll frame is the
      *  single most expensive thing a row does. */
     private val cellPool = ArrayList<View>()
+    /** Stand-in schedule of the channels that carry none, rebuilt when the axis changes. */
+    private val placeholders = HashMap<Long, List<Program>>()
 
     private val dayWidth get() = hourWidth * HOURS_IN_DAY
     private val gridWidth get() = dayWidth * loadedDays
@@ -73,6 +75,7 @@ class GuideRowsAdapter(
     fun setData(newChannels: List<Channel>, newPrograms: Map<Long, List<Program>>) {
         channels = newChannels
         programs = newPrograms
+        placeholders.clear()
         recomputeContentRange()
         // The rows are rebuilt by the data set change right below, so the window only has to be
         // brought up to date here - refilling now would build every row twice.
@@ -88,6 +91,7 @@ class GuideRowsAdapter(
         if (gridStart == start && loadedDays == days) return
         gridStart = start
         loadedDays = days.coerceIn(1, MAX_DAYS)
+        placeholders.clear()
         recomputeContentRange()
         updateWindow(refill = false)
         notifyDataSetChanged()
@@ -97,6 +101,7 @@ class GuideRowsAdapter(
     fun addDay(): Boolean {
         if (loadedDays >= MAX_DAYS) return false
         loadedDays++
+        placeholders.clear()
         recomputeContentRange()
         notifyDataSetChanged()
         return true
@@ -243,17 +248,48 @@ class GuideRowsAdapter(
     /** False while the crosshair is not on any cell, e.g. after the focus left the grid. */
     fun hasCrosshair(): Boolean = focusedChannel != RecyclerView.NO_POSITION
 
-    /** Programme of a row that is on air at [time], or null when that row carries nothing there. */
-    fun programAt(channelPosition: Int, time: Long): Program? {
-        val channel = channels.getOrNull(channelPosition) ?: return null
-        return programs[channel.id].orEmpty().firstOrNull { time in it.start until it.stop }
+    /**
+     * Programmes of a row, with a stand-in schedule for a channel that carries none at all.
+     *
+     * A channel the EPG says nothing about used to be an empty row, and every helper here skips such
+     * a row: the vertical step looked for the next channel with a cell and stepped over it, so the
+     * remote could not land on such a channel at all. The stand-in is a run of empty cells over the
+     * whole axis, which is the same thing the row would look like if the channel did have a schedule
+     * of blank entries - the remote walks it like any other row, and the info panel has something
+     * to say about the time it covers.
+     *
+     * The list is built once per axis and then reused, so a rebuild of the rows compares the same
+     * instance and the cell under the crosshair survives it.
+     */
+    private fun rowPrograms(channelPosition: Int): List<Program> {
+        val channel = channels.getOrNull(channelPosition) ?: return emptyList()
+        val stored = programs[channel.id].orEmpty()
+        val end = gridStart + loadedDays * DAY_MS
+        val onAxis = stored.any {
+            it.stop > gridStart && it.start < end &&
+                pixelForTime(it.stop) > 0 && pixelForTime(it.start) < gridWidth
+        }
+        if (onAxis) return stored
+        placeholders[channel.id]?.let { return it }
+        val built = ArrayList<Program>(loadedDays * HOURS_IN_DAY / PLACEHOLDER_HOURS)
+        var cursor = gridStart
+        while (cursor < end) {
+            val stop = (cursor + PLACEHOLDER_MS).coerceAtMost(end)
+            built += Program(channelId = channel.id, start = cursor, stop = stop)
+            cursor = stop
+        }
+        placeholders[channel.id] = built
+        return built
     }
+
+    /** Programme of a row that is on air at [time], or null when that row carries nothing there. */
+    fun programAt(channelPosition: Int, time: Long): Program? =
+        rowPrograms(channelPosition).firstOrNull { time in it.start until it.stop }
 
     /** First programme of a row that lies on the axis, or null when the row is empty. */
     fun firstProgramAt(channelPosition: Int): Program? {
-        val channel = channels.getOrNull(channelPosition) ?: return null
         val end = gridStart + loadedDays * DAY_MS
-        return programs[channel.id].orEmpty().firstOrNull { program ->
+        return rowPrograms(channelPosition).firstOrNull { program ->
             program.stop > gridStart && program.start < end &&
                 pixelForTime(program.stop) > 0 && pixelForTime(program.start) < gridWidth
         }
@@ -265,8 +301,7 @@ class GuideRowsAdapter(
      * lands on something that exists instead of stopping at a hole.
      */
     fun programBeside(channelPosition: Int, program: Program, step: Int): Program? {
-        val channel = channels.getOrNull(channelPosition) ?: return null
-        val list = programs[channel.id].orEmpty()
+        val list = rowPrograms(channelPosition)
         val index = list.indexOfFirst { it === program || it.start == program.start }
         if (index < 0) return null
         var cursor = index + step
@@ -285,9 +320,8 @@ class GuideRowsAdapter(
 
     /** True while the row carries at least one programme of the day that is on the axis. */
     private fun hasAnyCell(position: Int): Boolean {
-        val channel = channels.getOrNull(position) ?: return false
         val end = gridStart + loadedDays * DAY_MS
-        return programs[channel.id].orEmpty().any { program ->
+        return rowPrograms(position).any { program ->
             program.stop > gridStart && program.start < end &&
                 pixelForTime(program.stop) > 0 && pixelForTime(program.start) < gridWidth
         }
@@ -427,8 +461,8 @@ class GuideRowsAdapter(
 
     /** Programme spans, in grid pixels, of the rows that are currently on screen. */
     private fun attachedSpans(): List<List<IntRange>> = rows.mapNotNull { holder ->
-        val channel = channels.getOrNull(holder.channelPosition) ?: return@mapNotNull null
-        val spans = programs[channel.id].orEmpty().map { program ->
+        if (holder.channelPosition !in channels.indices) return@mapNotNull null
+        val spans = rowPrograms(holder.channelPosition).map { program ->
             val from = pixelForTime(program.start).coerceIn(0, gridWidth)
             val to = pixelForTime(program.stop).coerceIn(0, gridWidth)
             from..to
@@ -483,8 +517,7 @@ class GuideRowsAdapter(
     override fun getItemCount(): Int = channels.size
 
     override fun onBindViewHolder(holder: RowHolder, position: Int) {
-        val channel = channels[position]
-        val list = programs[channel.id].orEmpty()
+        val list = rowPrograms(position)
         holder.channelPosition = position
         if (holder.content.childCount == 0 ||
             holder.filledList !== list ||
@@ -613,5 +646,8 @@ class GuideRowsAdapter(
         /** Hours of the axis built around the visible window on both sides. */
         private const val WINDOW_MARGIN_HOURS = 2
         private const val CELL_POOL_MAX = 120
+        /** Length of one stand-in cell on a channel the EPG says nothing about. */
+        const val PLACEHOLDER_HOURS = 2
+        private const val PLACEHOLDER_MS = PLACEHOLDER_HOURS * 3_600_000L
     }
 }
