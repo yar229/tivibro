@@ -23,6 +23,10 @@
     <color name="vod_badge">#FF2196F3</color>
     <color name="catchup_badge">#FF1D873B</color>
     <color name="rec_badge">#FFF44336</color>
+    <color name="badge_live_text">#FFFFFFFF</color>
+    <color name="badge_vod_text">#FFFFFFFF</color>
+    <color name="badge_catchup_text">#FFFFFFFF</color>
+    <color name="badge_rec_text">#FFFFFFFF</color>
 
     <color name="text_primary">#FFFFFFFF</color>
     <color name="text_secondary">#B3FFFFFF</color>

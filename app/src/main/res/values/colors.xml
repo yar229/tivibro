@@ -19,10 +19,16 @@
     <color name="accent_dark">#FFD6E6F7</color>
     <color name="focus">#FF29577B</color>
 
-    <color name="live_badge">#FF3F51B5</color>
-    <color name="vod_badge">#FF1565C0</color>
-    <color name="catchup_badge">#FF1D873B</color>
-    <color name="rec_badge">#FFD32F2F</color>
+    <!-- Saturated fills would fight a light UI, so the light theme tints the badge down to a
+         pastel of the same hue and darkens the label to match. -->
+    <color name="live_badge">#FFD7DCF7</color>
+    <color name="vod_badge">#FFCCE7FA</color>
+    <color name="catchup_badge">#FFD7EFDB</color>
+    <color name="rec_badge">#FFFBE0E0</color>
+    <color name="badge_live_text">#FF1A237E</color>
+    <color name="badge_vod_text">#FF0D47A1</color>
+    <color name="badge_catchup_text">#FF1B5E20</color>
+    <color name="badge_rec_text">#FFB71C1C</color>
 
     <color name="text_primary">#FF141A22</color>
     <color name="text_secondary">#B3141A22</color>
