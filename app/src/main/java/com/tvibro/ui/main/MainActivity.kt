@@ -110,6 +110,17 @@ class MainActivity : AppCompatActivity() {
     /** Crosshair target that still has to be reached, kept until the cell really holds the focus. */
     private var focusTargetChannel = RecyclerView.NO_POSITION
     private var focusTargetProgram: Program? = null
+    /**
+     * True while the channel column holds the focus because this screen put it there, false while
+     * the focus is only there because the window handed it out on its own.
+     *
+     * A TV box has no touch mode, so the focus the window gives when the screen opens is simply
+     * the first focusable view of the tree, which is the channel column. That is not the user
+     * stepping away from the grid, and a pending crosshair must not read it as one - otherwise the
+     * target is dropped before the grid ever sees it, and the remote lands in the channel column
+     * instead of on the programme grid.
+     */
+    private var channelColumnFocusedByUs = false
     private var firstResume = true
     private var pendingAutoPlay = false
     private var playerLaunched = false
@@ -204,6 +215,17 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         pendingFocus = true
+        // Coming back to the guide means the remote belongs on the grid again. What is left of the
+        // previous session in the channel column was this screen's own doing, and keeping that
+        // would let the crosshair give up before the grid ever held the focus.
+        channelColumnFocusedByUs = false
+        // Rows that are still on screen from the previous session can hold the crosshair right away.
+        // Waiting for the reload below would leave the remote wherever the window puts it for as
+        // long as that takes, which on a TV box is seconds of a guide the user cannot steer.
+        if (pendingFocus && programsList.isLaidOut && programsList.childCount > 0) {
+            pendingFocus = false
+            prepareGuideFocus()
+        }
         // The panel font size can be changed while Settings is open on top of the guide.
         applyGuideInfoFontScale()
         // The window can be a different size than it was at startup, so the strip is measured again.
@@ -522,11 +544,23 @@ class MainActivity : AppCompatActivity() {
         keepOffset: Boolean = false,
     ) {
         val offsetBefore = guideRowsAdapter.currentOffset()
+        // setData() rebuilds every row, and the crosshair is a view among them: it goes with the
+        // rows it lived on. Remember where it stood so the same cell can be given the focus again.
+        val gridHadFocus = programsList.hasFocus()
+        val crosshairChannel = guideRowsAdapter.focusedChannelPosition()
+        val crosshairProgram = guideRowsAdapter.focusedProgram()
         guideRowsAdapter.setData(channels, programs)
         // The crosshair needs a built row, so where it has to land is only known now.
         if (pendingFocus) {
             pendingFocus = false
             prepareGuideFocus()
+        } else if (gridHadFocus && crosshairProgram != null &&
+            crosshairChannel != RecyclerView.NO_POSITION
+        ) {
+            // The reload came in while the remote stood in the grid. Putting the crosshair back on
+            // the very same programme is what keeps it there instead of dropping it on the window's
+            // own focus choice, which on a TV is the channel column again.
+            focusGuideCell(crosshairChannel, crosshairProgram)
         }
         programsList.doOnPreDraw {
             if (keepOffset) guideRowsAdapter.setOffset(offsetBefore) else scrollTimelineToNow()
@@ -539,7 +573,7 @@ class MainActivity : AppCompatActivity() {
         if (restoreFocusPosition != RecyclerView.NO_POSITION) {
             val position = restoreFocusPosition
             restoreFocusPosition = RecyclerView.NO_POSITION
-            focusList(guideChannelsList, position)
+            focusChannelColumn(position)
         }
     }
 
@@ -1142,7 +1176,7 @@ class MainActivity : AppCompatActivity() {
             STAGE_GROUPS -> {
                 leftStage = STAGE_CONTENT
                 groupsColumn.visible(false)
-                focusList(guideChannelsList)
+                focusChannelColumn()
             }
         }
         updateRevealButtons()
@@ -1173,6 +1207,16 @@ class MainActivity : AppCompatActivity() {
         focusList(list, target, FOCUS_ATTEMPTS)
     }
 
+    /**
+     * Focuses the channel column on purpose - the remote was sent there by this screen, so a pending
+     * crosshair may give it up instead of taking it back. Every path that lands the remote on the
+     * column goes through here.
+     */
+    private fun focusChannelColumn(position: Int = 0) {
+        channelColumnFocusedByUs = true
+        focusList(guideChannelsList, position)
+    }
+
     private fun focusList(list: RecyclerView, position: Int, attempts: Int) {
         if (attempts <= 0) return
         val child = list.findViewHolderForAdapterPosition(position)?.itemView
@@ -1194,8 +1238,9 @@ class MainActivity : AppCompatActivity() {
      * scrolled to that channel first and the cell is looked for again after every layout pass.
      */
     private fun focusGuide() {
+        channelColumnFocusedByUs = false
         if (currentChannels.isEmpty()) {
-            focusList(guideChannelsList)
+            focusChannelColumn()
             return
         }
         prepareGuideFocus()
@@ -1207,7 +1252,7 @@ class MainActivity : AppCompatActivity() {
             .takeIf { it >= 0 } ?: 0
         val channel = currentChannels.getOrNull(index)
         if (channel == null) {
-            focusList(guideChannelsList, index)
+            focusChannelColumn(index)
             return
         }
         // The axis always starts at today, so "now" is on it. It stays the landing point even while the grid
@@ -1215,7 +1260,9 @@ class MainActivity : AppCompatActivity() {
         val time = System.currentTimeMillis()
         val program = programAt(channel, time)
         if (program == null) {
-            focusList(guideChannelsList, index)
+            // Nothing is on air on this row, so there is no cell to put the remote on: the channel
+            // column is the only place left, and the user has to move right from there to enter it.
+            focusChannelColumn(index)
             return
         }
         focusTargetChannel = index
@@ -1227,10 +1274,10 @@ class MainActivity : AppCompatActivity() {
 
     /**
      * Puts the crosshair on the cell it was aimed at and keeps asking until the cell reports that
-     * it holds the focus. A single request is not enough: the rows are built during layout and the
-     * window itself hands the focus to the first focusable view of the tree, which is the "Today"
-     * button above the guide. The target is kept until it is really reached, so every later moment
-     * that can take the focus away is followed by another attempt.
+     * it holds the focus. A single request is not enough: the rows are built during layout, and the
+     * window itself hands the focus to the first focusable view of the tree when the screen comes
+     * up, which on a TV is the channel column. The target is kept until it is really reached, so
+     * every later moment that can take the focus away is followed by another attempt.
      */
     private fun applyPendingFocus(attempts: Int = FOCUS_ATTEMPTS) {
         val program = focusTargetProgram ?: return
@@ -1243,7 +1290,9 @@ class MainActivity : AppCompatActivity() {
         // The user has taken the remote to the channel column on purpose. A retry that is left over
         // from the opening of the guide must not pull the focus back into the grid under the finger
         // that is about to press the centre key, or the press lands on a cell instead of the row.
-        if (guideChannelsList.hasFocus()) {
+        // Only a focus this screen placed itself counts: the one the window hands out on its own
+        // is taken back here, that is what puts the remote on the grid when the guide opens.
+        if (channelColumnFocusedByUs && guideChannelsList.hasFocus()) {
             focusTargetProgram = null
             focusTargetChannel = RecyclerView.NO_POSITION
             return
@@ -1304,7 +1353,16 @@ class MainActivity : AppCompatActivity() {
      * crosshair skip a channel on the way down, while the same step upwards usually landed right.
      */
     private fun focusGuideCell(channelPosition: Int, program: Program): Boolean {
+        // The remote is being sent into the grid, so the channel column is no longer a place the
+        // user chose to be: a retry may take the focus back from it.
+        channelColumnFocusedByUs = false
         programsList.scrollToPosition(channelPosition)
+        // A programme outside the built window has no cell attached yet, and an unattached cell
+        // cannot take the focus - the retries below would run out against an empty row and the
+        // remote would be left on the grid with nothing highlighted. The axis is moved onto the
+        // programme first, so the row is rebuilt around it and the focus has somewhere to land.
+        guideRowsAdapter.setViewport(programsList.width)
+        guideRowsAdapter.setOffset(guideRowsAdapter.offsetToReveal(program))
         focusTargetChannel = channelPosition
         focusTargetProgram = program
         applyPendingFocus(FOCUS_ATTEMPTS)
@@ -1320,21 +1378,50 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * Inside the grid the D-pad belongs to the crosshair, so the key is handed to the default focus
-     * search. The time axis follows the cell that receives the focus - see [revealFocusedCell] -
-     * because the crosshair only lands on the next cell while the key event is still being handled.
-     * Going left also has to be able to leave the grid: when the focus does not move at all the data
-     * ends in that direction, and the channel column on the left takes the remote back instead of
-     * trapping the user in the grid.
+     * One horizontal step of the crosshair, answered here instead of left to the default focus
+     * search. The search would only reach the cell next to the focused one while that cell can take
+     * focus, and on a rebuilt row it regularly cannot: the key ends up scrolling the grid while the
+     * crosshair stays where it was. The step is therefore taken on the data, and the axis follows the
+     * cell that receives the focus - see [revealFocusedCell].
+     *
+     * At the left edge the channel column takes the remote back; at the right edge the step asks for
+     * the following day, so reaching the end keeps loading instead of stopping.
      */
-    private fun moveCrosshair(direction: Int) {
-        if (direction >= 0) return
-        val before = guideRowsAdapter.focusedProgram()
-        main.post {
-            if (guideRowsAdapter.focusedProgram() === before) {
-                focusList(guideChannelsList, guideRowsAdapter.focusedChannelPosition())
-            }
+    private fun moveCrosshair(direction: Int): Boolean {
+        val channel = guideRowsAdapter.focusedChannelPosition()
+        val program = guideRowsAdapter.focusedProgram()
+        if (program == null) {
+            if (direction < 0) focusChannelColumn(channel.coerceAtLeast(0))
+            return true
         }
+        val next = guideRowsAdapter.programBeside(channel, program, direction)
+        if (next != null) {
+            focusGuideCell(channel, next)
+            return true
+        }
+        if (direction < 0) {
+            focusChannelColumn(channel)
+        } else {
+            // The row ends here: reaching for the next day keeps the march to the right going.
+            loadMoreGuideDays()
+        }
+        return true
+    }
+
+    /**
+     * Puts the remote back into the grid from the channel column: on the row of the focused channel
+     * and on the programme that is on air there, or on the first one that row has when nothing is on.
+     * The key is answered here, so the default focus search never runs - it would walk to the picture
+     * of the mini player, which sits to the right of the channel column in the strip above.
+     */
+    private fun enterGridFromChannelColumn(): Boolean {
+        val position = guideChannelsAdapter.focusedPosition()
+        if (position < 0) return false
+        val now = System.currentTimeMillis()
+        val program = guideRowsAdapter.programOnAirAt(position, now)
+            ?: guideRowsAdapter.firstProgramAt(position)
+            ?: return false
+        return focusGuideCell(position, program)
     }
 
     /**
@@ -1648,8 +1735,13 @@ class MainActivity : AppCompatActivity() {
             KeyEvent.KEYCODE_DPAD_LEFT -> {
                 if (leftStage == STAGE_MENU) return true
                 if (leftStage == STAGE_CONTENT && programsList.hasFocus()) {
-                    moveCrosshair(-1)
-                    return false
+                    // The crosshair reached the start of the row. Handing the key back would let the
+                    // focus search walk out of the guide and land the remote on the menu strip above
+                    // it, which is where the user gets stuck with keys that do nothing useful. The
+                    // channel column is the place the remote belongs at the left edge, and it is
+                    // given the focus here instead - the same rule the vertical steps follow when
+                    // the list ends.
+                    return moveCrosshair(-1)
                 }
                 openLeftColumn()
                 return true
@@ -1661,10 +1753,15 @@ class MainActivity : AppCompatActivity() {
                 }
                 // From the channel column the right key belongs to the grid, so the crosshair can
                 // enter it; an open column keeps the timeline shortcut instead.
-                if (guideChannelsList.hasFocus()) return false
+                if (guideChannelsList.hasFocus()) {
+                    // The grid is entered on the row of the focused channel and on what is on air
+                    // there. The ordinary focus search is not left to do it: the next thing to the
+                    // right of a channel row is the picture of the mini player in the strip above,
+                    // and the remote would land there instead of in the guide.
+                    return enterGridFromChannelColumn()
+                }
                 if (programsList.hasFocus()) {
-                    moveCrosshair(1)
-                    return false
+                    return moveCrosshair(1)
                 }
                 scrollTimeline(TIMELINE_STEP_HOURS)
                 return true

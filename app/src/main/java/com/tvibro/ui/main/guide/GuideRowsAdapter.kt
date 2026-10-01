@@ -259,6 +259,27 @@ class GuideRowsAdapter(
         }
     }
 
+    /**
+     * Programme [step] places along the row of [channelPosition] from [program], or null when the
+     * row ends in that direction. Gaps between programmes are stepped over, so the crosshair always
+     * lands on something that exists instead of stopping at a hole.
+     */
+    fun programBeside(channelPosition: Int, program: Program, step: Int): Program? {
+        val channel = channels.getOrNull(channelPosition) ?: return null
+        val list = programs[channel.id].orEmpty()
+        val index = list.indexOfFirst { it === program || it.start == program.start }
+        if (index < 0) return null
+        var cursor = index + step
+        while (cursor in list.indices) {
+            val candidate = list[cursor]
+            if (pixelForTime(candidate.stop) > 0 && pixelForTime(candidate.start) < gridWidth) {
+                return candidate
+            }
+            cursor += step
+        }
+        return null
+    }
+
     private fun hasCellInDirection(step: Int): Boolean =
         nextChannelPosition(step) != RecyclerView.NO_POSITION
 
@@ -286,16 +307,26 @@ class GuideRowsAdapter(
      */
     fun revealShiftForFocusedCell(): Int {
         val program = focusedCell ?: return 0
-        if (viewport <= 0) return 0
+        return offsetToReveal(program) - offset
+    }
+
+    /**
+     * The offset at which [program] is fully inside the viewport, or the current one when it already
+     * is. It is what [revealShiftForFocusedCell] asks for a cell that has the focus, and it is asked
+     * *before* focusing too: a programme outside the built window has no cell to receive the focus,
+     * so the axis has to be moved onto it first or the remote would be sent to a cell that does not
+     * exist yet and the crosshair would never land.
+     */
+    fun offsetToReveal(program: Program): Int {
+        if (viewport <= 0) return offset
         val margin = cellMargin * 2
         val start = pixelForTime(program.start)
         val stop = pixelForTime(program.stop)
-        val target = when {
+        return when {
             stop - offset > viewport - margin -> stop - (viewport - margin)
             start - offset < margin -> start - margin
-            else -> return 0
+            else -> offset
         }
-        return target - offset
     }
 
     /**
