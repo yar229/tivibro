@@ -244,7 +244,7 @@ class GuideRowsAdapter(
     fun hasCrosshair(): Boolean = focusedChannel != RecyclerView.NO_POSITION
 
     /** Programme of a row that is on air at [time], or null when that row carries nothing there. */
-    fun programOnAirAt(channelPosition: Int, time: Long): Program? {
+    fun programAt(channelPosition: Int, time: Long): Program? {
         val channel = channels.getOrNull(channelPosition) ?: return null
         return programs[channel.id].orEmpty().firstOrNull { time in it.start until it.stop }
     }
@@ -322,6 +322,11 @@ class GuideRowsAdapter(
         val margin = cellMargin * 2
         val start = pixelForTime(program.start)
         val stop = pixelForTime(program.stop)
+        // A programme wider than the viewport fits nowhere. Its start is what the reader needs - the
+        // title sits at the left of the cell - so a wide cell is anchored by its start. Chasing it
+        // from one edge to the other is what made the axis jump back and forth on very long cells,
+        // and it left the title off screen while the cell filled the whole grid.
+        if (stop - start >= viewport - margin) return start - margin
         return when {
             stop - offset > viewport - margin -> stop - (viewport - margin)
             start - offset < margin -> start - margin
