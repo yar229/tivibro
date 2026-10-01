@@ -140,6 +140,12 @@ private lateinit var switchAudioCodec: TextView
     private var lastSideProgramsAt = 0L
 private var panelTimeout = 0L
     private var switchTimeout = 0L
+    /**
+     * The bottom info panel is up but playback of the switched channel has not started yet. Its
+     * hide timer only starts once the picture does, otherwise the panel could vanish over a stream
+     * that is still loading - which is exactly when the user is waiting to read it.
+     */
+    private var switchPanelWaitsForPlayback = false
  private var watchStart = 0L
  private var watchTimeMs = 0L
     private var videoHeight = 0
@@ -662,6 +668,7 @@ captureFontScale(switchAudioCodec) { prefs.bottomPanelFont }
         engine.onReady = {
             main.post {
                 clearBuffering.run()
+                armSwitchTimeoutOnPlayback()
             }
         }
         engine.onBuffering = { buffering ->
@@ -673,6 +680,8 @@ captureFontScale(switchAudioCodec) { prefs.bottomPanelFont }
         engine.onError = { error ->
             main.post {
                 clearBuffering.run()
+                // Playback will not start, so the panel must not wait for it forever.
+                armSwitchTimeoutOnPlayback()
                 if (error == "Audio codec not supported" && exoEngine != null) {
                     Log.d("TvibroPlayer", "audio codec unsupported, falling back to VLC")
                     tryVlcFallback()
@@ -842,6 +851,13 @@ captureFontScale(switchAudioCodec) { prefs.bottomPanelFont }
             switchPanel.visible(true)
             if (alreadyVisible) {
                 resetSwitchTimeout()
+            } else if (armBuffering) {
+                // A real channel switch is under way: the picture is still on its way, so the panel
+                // waits for playback instead of starting to count down now. armPlaybackStart()
+                // starts the timer as soon as the engine reports ready.
+                switchTimeout = 0
+                switchPanelWaitsForPlayback = true
+                if (!sideChannelsVisible) switchPanel.requestFocus()
             } else {
                 switchTimeout = System.currentTimeMillis() + (prefs.displayChangeTimeout * 1000L)
                 if (!sideChannelsVisible) switchPanel.requestFocus()
@@ -1112,6 +1128,7 @@ captureFontScale(switchAudioCodec) { prefs.bottomPanelFont }
         infoPanel.visible(false)
         switchPanel.visible(false)
         switchTimeout = 0
+        switchPanelWaitsForPlayback = false
     }
 
     private fun dismissPanels() {
@@ -1239,8 +1256,22 @@ captureFontScale(switchAudioCodec) { prefs.bottomPanelFont }
 
     private fun resetSwitchTimeout() {
         if (switchPanel.visibility == View.VISIBLE) {
+            // A panel that is still waiting for playback stays waiting: a key press does not mean
+            // the picture has arrived, and the countdown would hide the panel over the buffering.
+            if (switchPanelWaitsForPlayback) return
             switchTimeout = System.currentTimeMillis() + (prefs.displayChangeTimeout * 1000L)
         }
+    }
+
+    /**
+     * Playback of the switched channel has started: the bottom panel now gets its regular hide
+     * timer, taken from the setting. Also clears the wait flag, so a later panel behaves normally.
+     */
+    private fun armSwitchTimeoutOnPlayback() {
+        if (!switchPanelWaitsForPlayback) return
+        switchPanelWaitsForPlayback = false
+        if (switchPanel.visibility != View.VISIBLE) return
+        switchTimeout = System.currentTimeMillis() + (prefs.displayChangeTimeout * 1000L)
     }
 
     private fun performRemoteAction(action: String) {
