@@ -17,6 +17,7 @@
         android:layout_width="24dp"
         android:layout_height="24dp"
         android:contentDescription="@null"
+        android:tint="@color/icon_default"
         android:src="@drawable/ic_guide" />
 
     <TextView

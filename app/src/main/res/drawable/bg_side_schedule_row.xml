@@ -2,7 +2,7 @@
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:state_focused="true" android:state_activated="true">
         <shape android:shape="rectangle">
-            <solid android:color="#552196F3" />
+            <solid android:color="@color/schedule_row_focus_bg" />
             <stroke
                 android:width="2dp"
                 android:color="@color/accent" />
@@ -11,7 +11,7 @@
     </item>
     <item android:state_focused="true">
         <shape android:shape="rectangle">
-            <solid android:color="#33FFFFFF" />
+            <solid android:color="@color/schedule_row_focus_overlay" />
             <stroke
                 android:width="2dp"
                 android:color="@color/focus_frame" />
@@ -20,7 +20,7 @@
     </item>
     <item android:state_activated="true">
         <shape android:shape="rectangle">
-            <solid android:color="#332196F3" />
+            <solid android:color="@color/schedule_row_active_bg" />
             <stroke
                 android:width="1dp"
                 android:color="@color/accent" />
@@ -29,7 +29,7 @@
     </item>
     <item>
         <shape android:shape="rectangle">
-            <solid android:color="#1AFFFFFF" />
+            <solid android:color="@color/schedule_row_bg" />
             <corners android:radius="@dimen/corner_sm" />
         </shape>
     </item>

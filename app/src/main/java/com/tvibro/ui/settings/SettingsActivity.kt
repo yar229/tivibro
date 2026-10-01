@@ -20,6 +20,7 @@ import com.tvibro.data.model.PlaylistType
 import com.tvibro.ui.common.Dialogs
 import com.tvibro.ui.common.PinGate
 import com.tvibro.ui.playlist.PlaylistWizardActivity
+import com.tvibro.ui.theme.ThemeMode
 import com.tvibro.work.EpgUpdateScheduler
 import java.io.File
 
@@ -190,6 +191,17 @@ class SettingsActivity : AppCompatActivity() {
                 set = { prefs.language = it },
             ))
             add(SettingItem.Header(getString(R.string.appearance)))
+            // Switching it rebuilds the visible windows, which is what applies the new palette.
+            add(SettingItem.Choice(
+                getString(R.string.color_theme),
+                entries = resources.getStringArray(R.array.color_theme_entries).toList(),
+                values = ThemeMode.VALUES,
+                get = { prefs.colorTheme },
+                set = {
+                    prefs.colorTheme = it
+                    ThemeMode.apply(it)
+                },
+            ))
             add(switchItem(R.string.show_clock) { prefs.showClock })
             add(SettingItem.Choice(
                 getString(R.string.clock_position),

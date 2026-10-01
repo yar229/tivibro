@@ -445,6 +445,9 @@
     <string name="accent_color">Accent color</string>
     <string name="selection_color">Selection color</string>
     <string name="color_theme">Color theme</string>
+    <string name="theme_system">Follow system</string>
+    <string name="theme_dark">Dark</string>
+    <string name="theme_light">Light</string>
     <string name="background_color">Background color</string>
     <string name="transparency">Transparency</string>
     <string name="card_style">Card style</string>
@@ -650,34 +653,14 @@
     </string-array>
 
     <string-array name="color_theme_entries">
-        <item>Dark</item>
-        <item>Dark grey</item>
-        <item>Blue</item>
-        <item>Blue grey</item>
-        <item>Indigo</item>
-        <item>Teal</item>
-        <item>Cyan</item>
-        <item>Green</item>
-        <item>Amber</item>
-        <item>Red</item>
-        <item>Black</item>
-        <item>Grey</item>
-        <item>White</item>
+        <item>@string/theme_system</item>
+        <item>@string/theme_dark</item>
+        <item>@string/theme_light</item>
     </string-array>
     <string-array name="color_theme_values">
+        <item>system</item>
         <item>dark</item>
-        <item>dark_grey</item>
-        <item>blue</item>
-        <item>blue_grey</item>
-        <item>indigo</item>
-        <item>teal</item>
-        <item>cyan</item>
-        <item>green</item>
-        <item>amber</item>
-        <item>red</item>
-        <item>black</item>
-        <item>grey</item>
-        <item>white</item>
+        <item>light</item>
     </string-array>
 
     <string-array name="font_size_entries">

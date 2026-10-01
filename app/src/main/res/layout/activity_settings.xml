@@ -52,6 +52,7 @@
                 android:contentDescription="@string/back"
                 android:focusable="true"
                 android:padding="@dimen/spacing_md"
+                android:tint="@color/icon_default"
                 android:src="@drawable/ic_arrow_back" />
 
             <TextView

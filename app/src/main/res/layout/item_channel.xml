@@ -20,6 +20,7 @@
             android:layout_gravity="center"
             android:contentDescription="@null"
             android:scaleType="fitCenter"
+            android:tint="@color/icon_default"
             android:src="@drawable/ic_logo_channel" />
 
         <ImageView
