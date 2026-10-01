@@ -20,9 +20,10 @@ import kotlin.math.max
  * only ever re-transformed, so the labels would keep the ticks of the old moment. Instead the offset
  * is a plain field and every change repaints.
  *
- * The day is written in the upper left corner for the day the left edge of the window stands on, with
- * its full weekday name and its date. The grid carries today and the days after it as one continuous
- * strip, so this is what tells the user which day they are looking at while they scroll. Only the
+ * The day is written on one line in the upper left corner for the day the left edge of the window
+ * stands on, its full weekday name next to its date. The grid carries today and the days after it as
+ * one continuous strip, so this is what tells the user which day they are looking at while they
+ * scroll. Only the
  * ticks inside the window are drawn: the range spans several days, a tablet shows about six steps.
  */
 class TimeRulerView @JvmOverloads constructor(
@@ -160,21 +161,20 @@ class TimeRulerView @JvmOverloads constructor(
 
     /**
      * Writes the day of the left edge of the window into the upper left corner: the full weekday name
-     * above its date. It follows the scroll instead of sitting at the start of its own day, because a
-     * name pinned to the day boundary walks off the screen long before the day it names is over.
+     * followed by its date, on one line. It follows the scroll instead of sitting at the start of its
+     * own day, because a name pinned to the day boundary walks off the screen long before the day it
+     * names is over. The two parts are drawn with two paints instead of being joined into one string,
+     * so the accent of the day name and the quieter date can stay apart without a format string.
      */
     private fun drawDay(canvas: Canvas) {
         val day = (offset / dayWidth).coerceIn(0, days - 1)
         val time = gridStart + day * GuideRowsAdapter.DAY_MS
         val left = dayNamePaint.textSize * 0.4f
-        val nameBaseline = dayNamePaint.textSize
-        canvas.drawText(Fmt.dayName(time, locale), left, nameBaseline, dayNamePaint)
-        canvas.drawText(
-            Fmt.dayDate(time, locale),
-            left,
-            nameBaseline + dayDatePaint.textSize,
-            dayDatePaint,
-        )
+        val baseline = dayNamePaint.textSize
+        canvas.drawText(Fmt.dayName(time, locale), left, baseline, dayNamePaint)
+        val afterName = left + dayNamePaint.measureText(Fmt.dayName(time, locale)) +
+            dayDatePaint.textSize * 0.25f
+        canvas.drawText(Fmt.dayDate(time, locale), afterName, baseline, dayDatePaint)
     }
 
     private companion object {
