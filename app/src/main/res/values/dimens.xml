@@ -57,12 +57,13 @@
     <dimen name="guide_info_description_text">17sp</dimen>
     <!-- Cap for the programme block of the guide info panel, so the description keeps its room -->
     <dimen name="guide_info_title_width">420dp</dimen>
-    <!-- The guide strip is a bit less than a third of the screen, so the picture is worth watching
+    <!-- The guide strip is a bit over a third of the screen, so the picture is worth watching
          while the guide is open. Its height is a fraction of the screen, and the width of the video
          slot follows from it (16:9), so both are set in code from the measured screen instead of
-         being fixed dp values. -->
-    <item name="guide_info_panel_height" format="float" type="dimen">0.3</item>
-    <dimen name="guide_info_placeholder_size">56dp</dimen>
+         being fixed dp values. 0.345 is 15% more than the 0.3 the strip had before. -->
+    <item name="guide_info_panel_height" format="float" type="dimen">0.345</item>
+    <!-- Sign of a television in the empty slot. It follows the slot, so it grows with it. -->
+    <dimen name="guide_info_placeholder_size">64dp</dimen>
     <dimen name="epg_ruler_text">12sp</dimen>
 <dimen name="epg_ruler_day_name">15sp</dimen>
 <dimen name="epg_ruler_day_date">13sp</dimen>

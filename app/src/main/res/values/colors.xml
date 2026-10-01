@@ -1,43 +1,64 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Base palette sampled from the reference application theme -->
-    <color name="bg_app">#FF0F141B</color>
-    <color name="bg_app_gradient_end">#FF1A2430</color>
-    <color name="surface">#FF1C232C</color>
-    <color name="surface_elevated">#FF2C333C</color>
-    <color name="surface_high">#FF3C434C</color>
-    <color name="outline">#FF3C434C</color>
+
+    <!-- Light palette, used whenever the effective night mode is off (either because the device
+         is in day mode and the theme is "system", or because the theme is pinned to light).
+         The night counterpart lives in values-night. -->
+
+    <color name="bg_app">#FFF4F6F9</color>
+    <color name="bg_app_gradient_end">#FFE7ECF3</color>
+    <color name="surface">#FFFFFFFF</color>
+    <color name="surface_elevated">#FFFFFFFF</color>
+    <color name="surface_high">#FFDDE3EC</color>
+    <color name="outline">#FFC3CBD8</color>
 
     <color name="primary">#FF3F51B5</color>
     <color name="primary_dark">#FF2E4677</color>
     <color name="primary_light">#FF3B5998</color>
-    <color name="accent">#FF2196F3</color>
-    <color name="accent_dark">#FF142B3D</color>
+    <color name="accent">#FF1565C0</color>
+    <color name="accent_dark">#FFD6E6F7</color>
     <color name="focus">#FF29577B</color>
 
-    <color name="live_badge">#FF3F51B5</color>
-    <color name="vod_badge">#FF2196F3</color>
-    <color name="catchup_badge">#FF1D873B</color>
-    <color name="rec_badge">#FFF44336</color>
+    <!-- Saturated fills would fight a light UI, so the light theme tints the badge down to a
+         pastel of the same hue and darkens the label to match. -->
+    <color name="live_badge">#FFD7DCF7</color>
+    <color name="vod_badge">#FFCCE7FA</color>
+    <color name="catchup_badge">#FFD7EFDB</color>
+    <color name="rec_badge">#FFFBE0E0</color>
+    <color name="badge_live_text">#FF1A237E</color>
+    <color name="badge_vod_text">#FF0D47A1</color>
+    <color name="badge_catchup_text">#FF1B5E20</color>
+    <color name="badge_rec_text">#FFB71C1C</color>
 
-    <color name="text_primary">#FFFFFFFF</color>
-    <color name="text_secondary">#B3FFFFFF</color>
-    <color name="text_tertiary">#80FFFFFF</color>
-    <color name="text_disabled">#4DFFFFFF</color>
+    <color name="text_primary">#FF141A22</color>
+    <color name="text_secondary">#B3141A22</color>
+    <color name="text_tertiary">#80141A22</color>
+    <color name="text_disabled">#4D141A22</color>
     <color name="text_on_primary">#FFFFFFFF</color>
+    <color name="icon_default">#FF141A22</color>
 
-    <color name="scrim">#B3000000</color>
-    <color name="scrim_soft">#66000000</color>
-    <color name="panel">#CC0F141B</color>
-    <color name="panel_solid">#FF0F141B</color>
-    <color name="divider">#33FFFFFF</color>
+    <color name="scrim">#99101820</color>
+    <color name="scrim_soft">#66101820</color>
+    <color name="panel">#E6FFFFFF</color>
+    <color name="panel_solid">#FFFFFFFF</color>
+    <color name="divider">#33000000</color>
     <color name="focus_frame">#FF3B5998</color>
-    <color name="error">#FFF44336</color>
-    <color name="warning">#FFFFC107</color>
+    <color name="error">#FFD32F2F</color>
+    <color name="warning">#FFEF6C00</color>
 
-    <color name="nav_label">#FFFFFFFF</color>
-    <color name="nav_label_inactive">#8AFFFFFF</color>
-    <color name="subtitle_bg">#99000000</color>
+    <color name="nav_label">#FF141A22</color>
+    <color name="nav_label_inactive">#8A141A22</color>
+    <color name="subtitle_bg">#B3141A22</color>
     <color name="epg_now">#FF3B5998</color>
-    <color name="epg_past">#401C232C</color>
+    <color name="epg_past">#33E7ECF3</color>
+
+    <!-- Translucent layers that used to be written as literal hex in their drawables -->
+    <color name="row_overlay">#0A000000</color>
+    <color name="panel_gradient_start">#F2FFFFFF</color>
+    <color name="panel_gradient_end">#CCFFFFFF</color>
+    <color name="switch_track">#33000000</color>
+    <color name="schedule_row_bg">#14000000</color>
+    <color name="schedule_row_focus_overlay">#1F000000</color>
+    <color name="schedule_row_active_bg">#1F1565C0</color>
+    <color name="schedule_row_focus_bg">#331565C0</color>
 </resources>

@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools">
 
-    <style name="Theme.TvBro" parent="Theme.MaterialComponents.NoActionBar">
+    <!-- DayNight is what lets the "Color theme" setting work: the dark palette lives in
+         values-night, the light one in values, and uiMode picks between them. -->
+    <style name="Theme.TvBro" parent="Theme.MaterialComponents.DayNight.NoActionBar">
         <item name="android:windowBackground">@drawable/bg_app_gradient</item>
         <item name="android:colorBackground">@color/bg_app</item>
         <item name="colorPrimary">@color/primary</item>
@@ -134,13 +136,34 @@
         <item name="android:textColor">@color/text_primary</item>
     </style>
 
+    <!-- Metrics only: a badge draws its own fill, so the label colour has to be picked per badge
+         kind instead of being inherited from the plain text colour of the theme. -->
     <style name="TvBro.Badge" parent="">
         <item name="android:textSize">@dimen/text_xxs</item>
-        <item name="android:textColor">@color/text_primary</item>
         <item name="android:paddingLeft">@dimen/spacing_sm</item>
         <item name="android:paddingRight">@dimen/spacing_sm</item>
         <item name="android:paddingTop">1dp</item>
         <item name="android:paddingBottom">1dp</item>
+    </style>
+
+    <style name="TvBro.Badge.Live" parent="@style/TvBro.Badge">
+        <item name="android:background">@drawable/bg_badge_live</item>
+        <item name="android:textColor">@color/badge_live_text</item>
+    </style>
+
+    <style name="TvBro.Badge.Vod" parent="@style/TvBro.Badge">
+        <item name="android:background">@drawable/bg_badge_vod</item>
+        <item name="android:textColor">@color/badge_vod_text</item>
+    </style>
+
+    <style name="TvBro.Badge.Catchup" parent="@style/TvBro.Badge">
+        <item name="android:background">@drawable/bg_badge_catchup</item>
+        <item name="android:textColor">@color/badge_catchup_text</item>
+    </style>
+
+    <style name="TvBro.Badge.Rec" parent="@style/TvBro.Badge">
+        <item name="android:background">@drawable/bg_badge_rec</item>
+        <item name="android:textColor">@color/badge_rec_text</item>
     </style>
 
     <style name="TvBro.EpgProgramTitle" parent="">

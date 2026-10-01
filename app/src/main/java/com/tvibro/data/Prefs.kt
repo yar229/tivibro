@@ -3,6 +3,7 @@ package com.tvibro.data
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.core.content.edit
+import com.tvibro.ui.theme.ThemeMode
 import java.util.Locale
 
 class Prefs private constructor(context: Context) {
@@ -32,8 +33,14 @@ class Prefs private constructor(context: Context) {
         get() = sp.getInt(KEY_CLOCK_POSITION, 1)
         set(v) = sp.edit { putInt(KEY_CLOCK_POSITION, v) }
 
+    /**
+     * One of [com.tvibro.ui.theme.ThemeMode.SYSTEM] / [DARK] / [LIGHT].
+     *
+     * Dark by default: a tuner usually has no day/night switch and reports day mode, so "system"
+     * would put the whole UI into the light palette on a television.
+     */
     var colorTheme: String
-        get() = sp.getString(KEY_COLOR_THEME, "dark") ?: "dark"
+        get() = sp.getString(KEY_COLOR_THEME, ThemeMode.DARK) ?: ThemeMode.DARK
         set(v) = sp.edit { putString(KEY_COLOR_THEME, v) }
 
     var accentColor: Int

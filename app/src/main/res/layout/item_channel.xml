@@ -20,6 +20,7 @@
             android:layout_gravity="center"
             android:contentDescription="@null"
             android:scaleType="fitCenter"
+            android:tint="@color/icon_default"
             android:src="@drawable/ic_logo_channel" />
 
         <ImageView
@@ -41,7 +42,7 @@
             android:contentDescription="@null"
             android:padding="2dp"
             android:src="@drawable/ic_hd"
-            app:tint="@color/text_on_primary"
+            app:tint="@color/badge_live_text"
             android:visibility="gone" />
     </FrameLayout>
 
@@ -102,20 +103,18 @@
 
         <TextView
             android:id="@+id/badge_catchup"
-            style="@style/TvBro.Badge"
+            style="@style/TvBro.Badge.Catchup"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:background="@drawable/bg_badge_catchup"
             android:text="@string/catchup"
             android:visibility="gone" />
 
         <TextView
             android:id="@+id/badge_vod"
-            style="@style/TvBro.Badge"
+            style="@style/TvBro.Badge.Vod"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginStart="@dimen/spacing_xs"
-            android:background="@drawable/bg_badge_vod"
             android:text="@string/vod"
             android:visibility="gone" />
     </LinearLayout>

@@ -424,6 +424,9 @@
     <string name="accent_color">Акцентный цвет</string>
     <string name="selection_color">Цвет выделения</string>
     <string name="color_theme">Цветовая тема</string>
+    <string name="theme_system">Как в системе</string>
+    <string name="theme_dark">Тёмная</string>
+    <string name="theme_light">Светлая</string>
     <string name="background_color">Цвет фона</string>
     <string name="transparency">Прозрачность</string>
     <string name="card_style">Стиль карточек</string>

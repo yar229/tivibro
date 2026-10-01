@@ -1,7 +1,6 @@
 package com.tvibro.ui.main
 
 import android.content.Context
-import android.graphics.Color
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -162,7 +161,7 @@ class ChannelAdapter(
             val color = if (p.highlightCurrentPrograms && p.highlightCurrentProgramsInColor) {
                 ContextCompat.getColor(context, R.color.accent)
             } else if (p.highlightCurrentPrograms) {
-                Color.WHITE
+                ContextCompat.getColor(context, R.color.text_primary)
             } else {
                 ContextCompat.getColor(context, R.color.text_secondary)
             }
