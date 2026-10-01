@@ -59,7 +59,13 @@ android {
         targetSdk = 34
         versionCode = appVersionCode
         versionName = appVersionName
-        resourceConfigurations += setOf("en", "ru")
+    }
+
+    // Only the languages the app is actually translated into are kept. Libraries drag their own
+    // translations along otherwise. This is the supported form of the old
+    // defaultConfig.resourceConfigurations, which is deprecated in favour of exactly this block.
+    androidResources {
+        localeFilters += setOf("en", "ru")
     }
 
     signingConfigs {
