@@ -48,8 +48,10 @@ object Categories {
                 )
             }
         }
-        enabled.sortedBy { it.orderIndex }.forEach { playlist ->
-            val groups = repo.groupsOf(playlist.id)
+        // Every playlist is listed before any of the groups, so the column reads top down: first the
+        // service entries, then the playlists, and only then the groups they are split into.
+        val split = enabled.sortedBy { it.orderIndex }.map { it to repo.groupsOf(it.id) }
+        split.forEach { (playlist, groups) ->
             if (groups.isNotEmpty()) {
                 out += Category(
                     name = playlist.name,
@@ -58,6 +60,8 @@ object Categories {
                     icon = R.drawable.ic_folder,
                 )
             }
+        }
+        split.forEach { (playlist, groups) ->
             groups.forEach { group ->
                 out += Category(
                     name = group,

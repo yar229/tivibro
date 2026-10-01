@@ -11,6 +11,18 @@ import java.util.TimeZone
 
 class XmltvParser(
     private val storeDescriptions: Boolean = true,
+    /**
+     * Keeps only the programmes of the channels the caller knows, matched on the id attribute the
+     * way the channels are looked up later. A country wide EPG holds millions of entries and
+     * building the ones nobody asked for is what runs a tablet out of memory.
+     */
+    private val acceptChannel: ((String) -> Boolean)? = null,
+    /**
+     * Hands every accepted programme over as it comes out of the document. A caller that wants to
+     * follow the progress of a huge archive cannot wait for the parse to finish first, and passing
+     * the callback turns the collected list off.
+     */
+    private val onProgramme: ((Program) -> Unit)? = null,
 ) {
 
     class Result(
@@ -61,7 +73,10 @@ class XmltvParser(
                         val start = parseTime(parser.getAttributeValue(null, "start"))
                         val stop = parseTime(parser.getAttributeValue(null, "stop"))
                         val ch = parser.getAttributeValue(null, "channel").orEmpty()
-                        current = if (ch.isEmpty() || start <= 0L || stop <= start) {
+                        val accept = acceptChannel
+                        val wanted = accept == null ||
+                            accept(ch.trim().lowercase(Locale.US))
+                        current = if (!wanted || ch.isEmpty() || start <= 0L || stop <= start) {
                             null
                         } else {
                             Program(tvgId = ch, start = start + offset, stop = stop + offset)
@@ -123,7 +138,10 @@ class XmltvParser(
                             if (storeDescriptions) p.description = pick(descs)
                             p.category = category
                             p.icon = icon
-                            if (p.title.isNotEmpty()) programmes += p
+                            if (p.title.isNotEmpty()) {
+                                val accept = onProgramme
+                                if (accept == null) programmes += p else accept(p)
+                            }
                         }
                         current = null
                     }

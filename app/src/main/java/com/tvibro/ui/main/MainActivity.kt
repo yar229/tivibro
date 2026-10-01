@@ -34,6 +34,7 @@ import com.tvibro.data.db.TvBroRepository
 import com.tvibro.data.model.Channel
 import com.tvibro.data.model.ChannelFilter
 import com.tvibro.data.model.Program
+import com.tvibro.data.source.EpgProgress
 import com.tvibro.ui.common.Dialogs
 import com.tvibro.ui.main.guide.GuideChannelsAdapter
 import com.tvibro.ui.main.guide.GuideDaysAdapter
@@ -60,6 +61,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var guideRowsAdapter: GuideRowsAdapter
     private lateinit var daysAdapter: GuideDaysAdapter
     private lateinit var groupsList: RecyclerView
+    private lateinit var groupsColumn: LinearLayout
+    private lateinit var groupsButton: View
+    private lateinit var menuButton: View
     private lateinit var guideChannelsList: RecyclerView
     private lateinit var programsList: RecyclerView
     private lateinit var daysList: RecyclerView
@@ -79,6 +83,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var nowLine: View
     private lateinit var emptyView: TextView
     private lateinit var statusText: TextView
+    private lateinit var statusEpg: TextView
     private lateinit var clockView: TextView
     private lateinit var clockDateView: TextView
     private lateinit var titleView: TextView
@@ -116,6 +121,8 @@ class MainActivity : AppCompatActivity() {
     private var clockFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
     private var dateFormat = SimpleDateFormat("EEE, d MMM", Locale.getDefault())
     private var isRefreshing = false
+    private var tapDownX = 0f
+    private var tapDownY = 0f
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -127,6 +134,12 @@ class MainActivity : AppCompatActivity() {
         bindViews()
         buildMenuStrip()
         startClock()
+
+        // A touch screen has no Left key, so every visible column carries the button that opens the
+        // next hidden one. The buttons stay out of the focus chain, the remote goes on using its keys.
+        groupsButton.setOnClickListener { openLeftColumn() }
+        menuButton.setOnClickListener { openLeftColumn() }
+        updateRevealButtons()
 
         groupsAdapter = GroupsAdapter(
             onClick = { index -> onCategorySelected(index) },
@@ -206,15 +219,52 @@ class MainActivity : AppCompatActivity() {
         // A stream that the full screen player handed over keeps running, so the panel has to pick
         // the picture up again every time the guide comes back on top.
         attachMiniPlayer()
+        watchEpgProgress()
         reload(autoPlay = firstResume && prefs.turnOnLastChannel)
         firstResume = false
     }
 
     override fun onPause() {
         super.onPause()
+        // The line belongs to this window only: a background update keeps running, but nothing
+        // here is left to show it in.
+        TvBroApp.get().sources.stopWatching()
+        statusEpg.visible(false)
         // Only the picture this screen owns is parked here. A stream that is on its way into the
         // player window must not be touched, the player starts playing it by itself.
         if (Playback.inGuide()) Playback.pause()
+    }
+
+    /**
+     * The EPG update is normally started somewhere else, by the settings screen or by the worker,
+     * and it outlives this window. The line therefore only listens to what the manager publishes
+     * and gets the current state at once, so coming back to the guide does not lose a running update.
+     */
+    private fun watchEpgProgress() {
+        TvBroApp.get().sources.watch { progress -> showEpgProgress(progress) }
+    }
+
+    private fun showEpgProgress(progress: EpgProgress?) {
+        if (progress == null) {
+            statusEpg.visible(false)
+            return
+        }
+        // The file is read while it arrives and the programmes go straight into the database, so
+        // there is no state between "downloading" and "parsing": what grows on screen is the
+        // number of channels of the playlist that are already in.
+        if (progress.channelsTotal <= 0) {
+            statusEpg.text = getString(R.string.epg_updating)
+            statusEpg.visible(true)
+            return
+        }
+        val source = progress.label.ifBlank { getString(R.string.epg_updating) }
+        statusEpg.text = getString(
+            R.string.epg_progress_line,
+            source,
+            getString(R.string.epg_stage_parse),
+            getString(R.string.epg_progress_channels, progress.channels, progress.channelsTotal),
+        )
+        statusEpg.visible(true)
     }
 
     /**
@@ -253,6 +303,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun bindViews() {
         groupsList = findViewById(R.id.groups_list)
+        groupsColumn = findViewById(R.id.groups_column)
+        groupsButton = findViewById(R.id.groups_button)
+        menuButton = findViewById(R.id.menu_button)
         guideChannelsList = findViewById(R.id.guide_channels_list)
         programsList = findViewById(R.id.programs_rows)
         daysList = findViewById(R.id.days_list)
@@ -283,6 +336,7 @@ class MainActivity : AppCompatActivity() {
         attachMiniPlayer()
         emptyView = findViewById(R.id.empty_view)
         statusText = findViewById(R.id.status_text)
+        statusEpg = findViewById(R.id.status_epg)
         clockView = findViewById(R.id.clock)
         clockDateView = findViewById(R.id.clock_date)
         titleView = findViewById(R.id.title)
@@ -985,6 +1039,50 @@ class MainActivity : AppCompatActivity() {
     // ------------------------------------------------------------ navigation
 
     /**
+     * A touch screen has no Right key to put the columns away again, so a single tap does it: any
+     * tap at all, on a column item, on the channel column or on the programme grid, hides both of
+     * them. The tap itself is not swallowed, so it still selects its channel, category or
+     * programme. Only the button that opens the next column is left alone, and only touch is
+     * looked at here: the keys keep their own handling, so the remote behaves exactly as before.
+     */
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        when (ev.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                tapDownX = ev.x
+                tapDownY = ev.y
+            }
+            MotionEvent.ACTION_UP -> {
+                val slop = ViewConfiguration.get(this).scaledTouchSlop
+                val tap = ev.x - tapDownX < slop && ev.x - tapDownX > -slop &&
+                    ev.y - tapDownY < slop && ev.y - tapDownY > -slop
+                val opensColumn = leftStage == STAGE_GROUPS && touchOnMenuButton(ev)
+                if (tap && leftStage != STAGE_CONTENT && !opensColumn) closeLeftColumns()
+            }
+        }
+        return super.dispatchTouchEvent(ev)
+    }
+
+    /** True when the tap landed on the button that peels the menu strip open. */
+    private fun touchOnMenuButton(ev: MotionEvent): Boolean {
+        val location = IntArray(2)
+        menuButton.getLocationInWindow(location)
+        return ev.x >= location[0] && ev.x <= location[0] + menuButton.width &&
+            ev.y >= location[1] && ev.y <= location[1] + menuButton.height
+    }
+
+    /**
+     * Both columns go away in one step. The focus is left where it is: a touch never held it, and
+     * moving it would take the focus away from wherever the remote had left the guide.
+     */
+    private fun closeLeftColumns() {
+        if (leftStage == STAGE_CONTENT) return
+        leftStage = STAGE_CONTENT
+        menuStrip.visible(false)
+        groupsColumn.visible(false)
+        updateRevealButtons()
+    }
+
+    /**
      * Left arrow peels the window open one column at a time: first the channel groups,
      * then the menu strip that used to sit horizontally in the top bar. Right arrow and
      * Back put the columns away again, one per press.
@@ -993,7 +1091,7 @@ class MainActivity : AppCompatActivity() {
         when (leftStage) {
             STAGE_CONTENT -> {
                 leftStage = STAGE_GROUPS
-                groupsList.visible(true)
+                groupsColumn.visible(true)
                 focusList(groupsList, groupsAdapter.selectedIndex())
             }
             STAGE_GROUPS -> {
@@ -1002,6 +1100,7 @@ class MainActivity : AppCompatActivity() {
                 focusFirst(menuStrip)
             }
         }
+        updateRevealButtons()
     }
 
     private fun closeLeftColumn() {
@@ -1013,10 +1112,17 @@ class MainActivity : AppCompatActivity() {
             }
             STAGE_GROUPS -> {
                 leftStage = STAGE_CONTENT
-                groupsList.visible(false)
+                groupsColumn.visible(false)
                 focusList(guideChannelsList)
             }
         }
+        updateRevealButtons()
+    }
+
+    /** Only the last visible column has something left to open, so only it shows its button. */
+    private fun updateRevealButtons() {
+        groupsButton.visible(leftStage == STAGE_CONTENT)
+        menuButton.visible(leftStage == STAGE_GROUPS)
     }
 
     private fun focusFirst(container: ViewGroup) {
@@ -1494,7 +1600,8 @@ class MainActivity : AppCompatActivity() {
             KeyEvent.KEYCODE_GUIDE -> {
                 leftStage = STAGE_CONTENT
                 menuStrip.visible(false)
-                groupsList.visible(false)
+                groupsColumn.visible(false)
+                updateRevealButtons()
                 focusGuide()
                 return true
             }
