@@ -44,12 +44,24 @@ object Playback {
 
     /**
      * Takes ownership of a freshly created engine and shows its picture in [container]. The
-     * callbacks stay empty here: whoever wires the engine points them at itself.
+* callbacks stay empty here: whoever wires the engine points them at itself.
      */
     fun claim(created: PlaybackEngine, container: ViewGroup) {
+        claim(created, container, HOST_PLAYER)
+    }
+
+    /**
+     * Same as [claim], but for the mini player: the guide panel is the host from the very first
+     * frame, so nothing ever pretends the full screen player owns the stream.
+     */
+    fun claimInGuide(created: PlaybackEngine, container: ViewGroup) {
+        claim(created, container, HOST_GUIDE)
+    }
+
+    private fun claim(created: PlaybackEngine, container: ViewGroup, host: Int) {
         detach(created)
         engine = created
-        host = HOST_PLAYER
+        this.host = host
         attach(created, container)
     }
 
