@@ -14,10 +14,15 @@ import com.tvibro.data.model.Program
 /**
  * One row per channel, programs laid out along the time axis.
  *
- * Rows do not scroll on their own. Every row is padded to exactly one day and the whole grid is
+ * Rows do not scroll on their own. Every row is padded to the whole loaded range and the grid is
  * moved by translating the row content by a single shared offset, so there is no per-row scroll
  * position to keep in sync. Rows used to hold an independently scrolling RecyclerView each, and
  * syncing them on every frame both flickered and made the shared position unreliable.
+ *
+ * The axis covers [days] days starting at [gridStart], so "today" and the days after it are one
+ * continuous grid and the days are picked by scrolling, not by a day picker above it. The caller
+ * grows [days] while the user moves to the right, and the range is only as long as the schedule
+ * that has actually been read from the database.
  */
 class GuideRowsAdapter(
     hourWidthPx: Int,
@@ -30,7 +35,8 @@ class GuideRowsAdapter(
     private var channels: List<Channel> = emptyList()
     private var programs: Map<Long, List<Program>> = emptyMap()
     private var hourWidth = hourWidthPx.coerceAtLeast(1)
-    private var dayStart = Fmt.startOfDay(System.currentTimeMillis())
+    private var gridStart = Fmt.startOfDay(System.currentTimeMillis())
+    private var loadedDays = INITIAL_DAYS
     private var highlightCurrent = true
     private var offset = 0
     private var viewport = 0
@@ -43,7 +49,8 @@ class GuideRowsAdapter(
     private var cellMargin = 0
     private val rows = ArrayList<RowHolder>()
 
-    private val dayWidth get() = hourWidth * GuideDaysAdapter.HOURS_IN_DAY
+    private val dayWidth get() = hourWidth * HOURS_IN_DAY
+    private val gridWidth get() = dayWidth * loadedDays
 
     class RowHolder(view: View) : RecyclerView.ViewHolder(view) {
         val content: LinearLayout = view.findViewById(R.id.programs)
@@ -51,6 +58,7 @@ class GuideRowsAdapter(
         var bound: Boolean = false
         var filledList: List<Program>? = null
         var filledDay: Long = 0L
+        var filledDays: Int = 0
         var filledHighlight: Boolean = false
     }
 
@@ -65,11 +73,37 @@ class GuideRowsAdapter(
         notifyDataSetChanged()
     }
 
-    fun setDayStart(start: Long) {
-        dayStart = start
+    fun setRange(start: Long, days: Int) {
+        if (gridStart == start && loadedDays == days) return
+        gridStart = start
+        loadedDays = days.coerceIn(1, MAX_DAYS)
         recomputeContentRange()
         notifyDataSetChanged()
     }
+
+    /** Grows the axis by one day, so scrolling to the right reaches the schedule that follows. */
+    fun addDay(): Boolean {
+        if (loadedDays >= MAX_DAYS) return false
+        loadedDays++
+        recomputeContentRange()
+        notifyDataSetChanged()
+        return true
+    }
+
+    /** Start of the axis, in epoch millis. */
+    fun rangeStart(): Long = gridStart
+
+    /** Days the axis currently covers. */
+    fun rangeDays(): Int = loadedDays
+
+    /** Days the axis currently covers, read from the same field the grid is padded to. */
+    fun loadedDays(): Int = loadedDays
+
+    /** Width of the whole axis in pixels, the space a fling can travel through. */
+    fun loadedWidth(): Int = gridWidth
+
+    /** True while more days can still be appended to the axis. */
+    fun canGrow(): Boolean = loadedDays < MAX_DAYS
 
     fun setHighlightCurrent(enabled: Boolean) {
         if (highlightCurrent == enabled) return
@@ -181,10 +215,10 @@ class GuideRowsAdapter(
     /** First programme of a row that lies on the axis, or null when the row is empty. */
     fun firstProgramAt(channelPosition: Int): Program? {
         val channel = channels.getOrNull(channelPosition) ?: return null
-        val end = dayStart + GuideDaysAdapter.DAY_MS
+        val end = gridStart + loadedDays * DAY_MS
         return programs[channel.id].orEmpty().firstOrNull { program ->
-            program.stop > dayStart && program.start < end &&
-                pixelForTime(program.stop) > 0 && pixelForTime(program.start) < dayWidth
+            program.stop > gridStart && program.start < end &&
+                pixelForTime(program.stop) > 0 && pixelForTime(program.start) < gridWidth
         }
     }
 
@@ -194,10 +228,10 @@ class GuideRowsAdapter(
     /** True while the row carries at least one programme of the day that is on the axis. */
     private fun hasAnyCell(position: Int): Boolean {
         val channel = channels.getOrNull(position) ?: return false
-        val end = dayStart + GuideDaysAdapter.DAY_MS
+        val end = gridStart + loadedDays * DAY_MS
         return programs[channel.id].orEmpty().any { program ->
-            program.stop > dayStart && program.start < end &&
-                pixelForTime(program.stop) > 0 && pixelForTime(program.start) < dayWidth
+            program.stop > gridStart && program.start < end &&
+                pixelForTime(program.stop) > 0 && pixelForTime(program.start) < gridWidth
         }
     }
 
@@ -272,7 +306,7 @@ class GuideRowsAdapter(
         else -> R.drawable.bg_epg_cell
     }
 
-    fun pixelForTime(time: Long): Int = ((time - dayStart) / 3_600_000f * hourWidth).toInt()
+    fun pixelForTime(time: Long): Int = ((time - gridStart) / 3_600_000f * hourWidth).toInt()
 
     fun currentOffset(): Int = offset
 
@@ -308,7 +342,7 @@ class GuideRowsAdapter(
         }
         if (populated(offset)) return null
         val step = hourWidth
-        val steps = dayWidth / step + 1
+        val steps = gridWidth / step + 1
         for (distance in 1..steps) {
             val ahead = offset + distance * step
             if (ahead <= max && populated(ahead)) return ahead.coerceAtMost(max)
@@ -322,8 +356,8 @@ class GuideRowsAdapter(
     private fun attachedSpans(): List<List<IntRange>> = rows.mapNotNull { holder ->
         val channel = channels.getOrNull(holder.channelPosition) ?: return@mapNotNull null
         val spans = programs[channel.id].orEmpty().map { program ->
-            val from = pixelForTime(program.start).coerceIn(0, dayWidth)
-            val to = pixelForTime(program.stop).coerceIn(0, dayWidth)
+            val from = pixelForTime(program.start).coerceIn(0, gridWidth)
+            val to = pixelForTime(program.stop).coerceIn(0, gridWidth)
             from..to
         }
         if (spans.isEmpty()) null else spans
@@ -343,21 +377,21 @@ class GuideRowsAdapter(
      * would let a fling scroll into hours that are empty for every channel.
      */
     private fun recomputeContentRange() {
-        var from = dayWidth
+        var from = gridWidth
         var to = 0
-        val end = dayStart + GuideDaysAdapter.DAY_MS
+        val end = gridStart + loadedDays * DAY_MS
         for (list in programs.values) {
             for (program in list) {
-                if (program.stop <= dayStart || program.start >= end) continue
+                if (program.stop <= gridStart || program.start >= end) continue
                 from = minOf(from, pixelForTime(program.start).coerceAtLeast(0))
                 to = maxOf(to, pixelForTime(program.stop))
             }
         }
-        contentStart = if (to > from) from.coerceIn(0, dayWidth) else 0
-        contentEnd = if (to > from) to.coerceIn(0, dayWidth) else dayWidth
+        contentStart = if (to > from) from.coerceIn(0, gridWidth) else 0
+        contentEnd = if (to > from) to.coerceIn(0, gridWidth) else gridWidth
     }
 
-    private fun minOffset(): Int = contentStart.coerceIn(0, (dayWidth - viewport).coerceAtLeast(0))
+    private fun minOffset(): Int = contentStart.coerceIn(0, (gridWidth - viewport).coerceAtLeast(0))
 
     private fun maxOffset(): Int =
         (contentEnd - viewport).coerceAtLeast(0).coerceAtLeast(minOffset())
@@ -377,7 +411,8 @@ class GuideRowsAdapter(
         holder.channelPosition = position
         if (holder.content.childCount == 0 ||
             holder.filledList !== list ||
-            holder.filledDay != dayStart ||
+            holder.filledDay != gridStart ||
+            holder.filledDays != loadedDays ||
             holder.filledHighlight != highlightCurrent
         ) {
             fill(holder, list)
@@ -407,8 +442,8 @@ class GuideRowsAdapter(
         for (program in list) {
             val from = pixelForTime(program.start)
             val to = pixelForTime(program.stop)
-            if (to <= 0 || from >= dayWidth) continue
-            val start = from.coerceIn(0, dayWidth)
+            if (to <= 0 || from >= gridWidth) continue
+            val start = from.coerceIn(0, gridWidth)
             // Cells are placed at their real start time instead of being laid out back to back,
             // otherwise the row drifts against the time axis and the current time marker ends up
             // in the wrong place. Gaps between programmes become invisible filler.
@@ -416,7 +451,7 @@ class GuideRowsAdapter(
                 addFiller(content, start - cursor)
                 cursor = start
             }
-            val width = (to.coerceIn(start + 1, dayWidth) - start).coerceAtLeast(1)
+            val width = (to.coerceIn(start + 1, gridWidth) - start).coerceAtLeast(1)
             val cell = inflater.inflate(R.layout.item_epg_program, content, false)
             cell.layoutParams = LinearLayout.LayoutParams(
                 (width - margin).coerceAtLeast(1),
@@ -455,16 +490,24 @@ class GuideRowsAdapter(
             content.addView(cell)
             cursor = start + width
         }
-        // Pad the row out to a full day so every row shares one scroll range.
-        if (dayWidth > cursor) addFiller(content, dayWidth - cursor)
-        content.layoutParams = content.layoutParams.apply { width = dayWidth }
+        // Pad the row out to the full loaded range so every row shares one scroll range.
+        if (gridWidth > cursor) addFiller(content, gridWidth - cursor)
+        content.layoutParams = content.layoutParams.apply { width = gridWidth }
         holder.filledList = list
-        holder.filledDay = dayStart
+        holder.filledDay = gridStart
+        holder.filledDays = loadedDays
         holder.filledHighlight = highlightCurrent
     }
 
     private fun addFiller(content: LinearLayout, width: Int) {
         val filler = View(content.context)
         content.addView(filler, LinearLayout.LayoutParams(width, ViewGroup.LayoutParams.MATCH_PARENT))
+    }
+
+    companion object {
+        const val DAY_MS = 86_400_000L
+        const val HOURS_IN_DAY = 24
+        const val INITIAL_DAYS = 2
+        const val MAX_DAYS = 7
     }
 }

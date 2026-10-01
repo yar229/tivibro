@@ -48,15 +48,8 @@
                 tools:text="1st Playlist / Sports" />
         </LinearLayout>
 
-        <androidx.recyclerview.widget.RecyclerView
-            android:id="@+id/days_list"
-            android:layout_width="wrap_content"
-            android:layout_height="match_parent"
-            android:layout_marginStart="@dimen/spacing_md"
-            android:layout_marginEnd="@dimen/spacing_md"
-            android:clipToPadding="false"
-            android:nextFocusDown="@id/guide_channels_list"
-            android:scrollbars="none" />
+        <!-- No day picker: the grid starts at today and carries the days after it, with their names
+             on the scale itself, so the days are reached by scrolling instead of by picking one. -->
 
         <LinearLayout
             android:id="@+id/clock_container"
@@ -344,9 +337,11 @@
                 android:layout_weight="1"
                 android:orientation="vertical">
 
+                <!-- Drawn in place rather than moved over the grid: it repaints on every change of the shared
+                     offset, which is what keeps its ticks and its day label on the same moment. -->
                 <com.tvibro.ui.main.guide.TimeRulerView
                     android:id="@+id/time_ruler"
-                    android:layout_width="wrap_content"
+                    android:layout_width="match_parent"
                     android:layout_height="@dimen/epg_ruler_height"
                     android:focusable="false"
                     android:focusableInTouchMode="false" />

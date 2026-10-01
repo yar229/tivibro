@@ -37,7 +37,6 @@ import com.tvibro.data.model.Program
 import com.tvibro.data.source.EpgProgress
 import com.tvibro.ui.common.Dialogs
 import com.tvibro.ui.main.guide.GuideChannelsAdapter
-import com.tvibro.ui.main.guide.GuideDaysAdapter
 import com.tvibro.ui.main.guide.GuideRowsAdapter
 import com.tvibro.ui.main.guide.TimeRulerView
 import com.tvibro.ui.pin.PinActivity
@@ -59,14 +58,12 @@ class MainActivity : AppCompatActivity() {
     private lateinit var groupsAdapter: GroupsAdapter
     private lateinit var guideChannelsAdapter: GuideChannelsAdapter
     private lateinit var guideRowsAdapter: GuideRowsAdapter
-    private lateinit var daysAdapter: GuideDaysAdapter
     private lateinit var groupsList: RecyclerView
     private lateinit var groupsColumn: LinearLayout
     private lateinit var groupsButton: View
     private lateinit var menuButton: View
     private lateinit var guideChannelsList: RecyclerView
     private lateinit var programsList: RecyclerView
-    private lateinit var daysList: RecyclerView
     private lateinit var menuStrip: LinearLayout
     private lateinit var gridContainer: LinearLayout
     private lateinit var timeRuler: TimeRulerView
@@ -106,8 +103,10 @@ class MainActivity : AppCompatActivity() {
     private var lastSyncPosition = RecyclerView.NO_POSITION
     private var lastSyncTop = 0
     private var restoreFocusPosition = RecyclerView.NO_POSITION
-    private var dayStart = 0L
-    private var dayIndex = 0
+    private var gridStart = 0L
+    private var loadedDays = GuideRowsAdapter.INITIAL_DAYS
+    /** True while a longer range is being read, so the scroll does not ask for it over and over. */
+    private var loadingMoreDays = false
     private var leftStage = STAGE_CONTENT
     private var answeredConfirm = 0L
     private var pendingFocus = true
@@ -148,10 +147,6 @@ class MainActivity : AppCompatActivity() {
         groupsList.layoutManager = LinearLayoutManager(this)
         groupsList.adapter = groupsAdapter
 
-        daysAdapter = GuideDaysAdapter(GUIDE_DAYS) { index -> selectDay(index) }
-        daysList.layoutManager = LinearLayoutManager(this, RecyclerView.HORIZONTAL, false)
-        daysList.adapter = daysAdapter
-
         guideChannelsAdapter = GuideChannelsAdapter(
             onClick = { position -> onGuideChannelClick(position) },
             onLongClick = { position -> onChannelLongClick(position) },
@@ -168,6 +163,7 @@ class MainActivity : AppCompatActivity() {
             onOffsetChanged = {
                 positionNowLine()
                 timeRuler.setOffset(guideRowsAdapter.currentOffset())
+                extendGuideIfNearEnd()
             },
         )
         programsList.layoutManager = LinearLayoutManager(this)
@@ -190,9 +186,8 @@ class MainActivity : AppCompatActivity() {
             }
         })
 
-        dayStart = Fmt.startOfDay(System.currentTimeMillis())
-        timeRuler.setDayStart(dayStart)
-        daysAdapter.submit(dayStart)
+        gridStart = Fmt.startOfDay(System.currentTimeMillis())
+        timeRuler.setRange(gridStart, loadedDays)
         applyHighlighting()
 
         maybeAutoUpdate()
@@ -308,7 +303,6 @@ class MainActivity : AppCompatActivity() {
         menuButton = findViewById(R.id.menu_button)
         guideChannelsList = findViewById(R.id.guide_channels_list)
         programsList = findViewById(R.id.programs_rows)
-        daysList = findViewById(R.id.days_list)
         menuStrip = findViewById(R.id.menu_strip)
         gridContainer = findViewById(R.id.grid_container)
         timeRuler = findViewById(R.id.time_ruler)
@@ -451,18 +445,18 @@ class MainActivity : AppCompatActivity() {
             nowLine.visible(false)
             return
         }
-        val key = "$categoryIndex:$dayIndex"
+        val key = "$categoryIndex:$loadedDays"
         guideCache[key]?.let { cached ->
             guidePrograms = cached
             applyGuideData(channels, cached)
             return
         }
+        val from = gridStart
         guideExecutor.execute {
-            val from = dayStart
             val map = repo.programsForChannels(
                 channels.map { it.id },
                 from,
-                from + GuideDaysAdapter.DAY_MS,
+                from + loadedDays * GuideRowsAdapter.DAY_MS,
             )
             main.post {
                 if (loadId != guideLoadId) return@post
@@ -474,10 +468,70 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
+     * Asks for the next day once the right edge of the window comes within an hour of the end of the
+     * loaded range, so scrolling forward keeps running into the following days instead of stopping.
+     * Called from the offset callback, which every scroll path goes through.
+     */
+    private fun extendGuideIfNearEnd() {
+        if (loadingMoreDays || !guideRowsAdapter.canGrow()) return
+        val viewport = programsList.width
+        if (viewport <= 0) return
+        val reached = guideRowsAdapter.currentOffset() + viewport
+        if (reached >= guideRowsAdapter.loadedWidth() - guideRowsAdapter.hourWidthPx()) {
+            loadMoreGuideDays()
+        }
+    }
+
+    /**
+     * Reaches for the next day as soon as the grid approaches the end of what it holds, so scrolling
+     * to the right keeps going instead of stopping at a wall. Only days the database already holds
+     * are read, and the axis is never grown past [GuideRowsAdapter.MAX_DAYS].
+     *
+     * The offset is restored afterwards: appending to the left of the current position would throw
+     * the view back to "now" while the user is looking at tomorrow.
+     */
+    private fun loadMoreGuideDays() {
+        if (loadingMoreDays || guideRowsAdapter.loadedDays() >= GuideRowsAdapter.MAX_DAYS) return
+        val channels = currentChannels
+        if (channels.isEmpty()) return
+        val from = gridStart + guideRowsAdapter.loadedDays() * GuideRowsAdapter.DAY_MS
+        loadingMoreDays = true
+        val loadId = guideLoadId
+        guideExecutor.execute {
+            val map = repo.programsForChannels(
+                channels.map { it.id },
+                from,
+                from + GuideRowsAdapter.DAY_MS,
+            )
+            main.post {
+                loadingMoreDays = false
+                if (loadId != guideLoadId) return@post
+                val days = guideRowsAdapter.loadedDays()
+                // Nothing was stored for that day, so the axis would end in empty space.
+                if (map.isEmpty() || !guideRowsAdapter.canGrow()) return@post
+                guideRowsAdapter.setRange(gridStart, days + 1)
+                timeRuler.setRange(gridStart, days + 1)
+                loadedDays = guideRowsAdapter.rangeDays()
+                val merged = HashMap<Long, MutableList<Program>>(guidePrograms.size * 2)
+                for ((id, list) in guidePrograms) merged[id] = ArrayList(list)
+                for ((id, list) in map) merged.getOrPut(id) { ArrayList() }.addAll(list)
+                val sorted = merged.mapValues { (_, list) -> list.sortedBy { it.start } }
+                guidePrograms = sorted
+                applyGuideData(channels, sorted, keepOffset = true)
+            }
+        }
+    }
+
+    /**
      * The rows of the grid are built during layout, so the timeline can only be positioned
      * once the rows exist - before that every horizontal scroll is a no-op.
      */
-    private fun applyGuideData(channels: List<Channel>, programs: Map<Long, List<Program>>) {
+    private fun applyGuideData(
+        channels: List<Channel>,
+        programs: Map<Long, List<Program>>,
+        keepOffset: Boolean = false,
+    ) {
+        val offsetBefore = guideRowsAdapter.currentOffset()
         guideRowsAdapter.setData(channels, programs)
         // The crosshair needs a built row, so where it has to land is only known now.
         if (pendingFocus) {
@@ -485,7 +539,7 @@ class MainActivity : AppCompatActivity() {
             prepareGuideFocus()
         }
         programsList.doOnPreDraw {
-            scrollTimelineToNow()
+            if (keepOffset) guideRowsAdapter.setOffset(offsetBefore) else scrollTimelineToNow()
             // Last attempt of this layout pass: the window gives the focus to the first focusable
             // view of the tree ("Today") after onResume, so the crosshair has to be set again here.
             applyPendingFocus()
@@ -499,25 +553,10 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun selectDay(index: Int) {
-        val target = index.coerceIn(0, GUIDE_DAYS - 1)
-        if (target == dayIndex) return
-        val picked = guideRowsAdapter.selectedChannelPosition()
-        if (picked != RecyclerView.NO_POSITION && programsList.hasFocus()) {
-            restoreFocusPosition = picked
-        }
-        dayIndex = target
-        dayStart = Fmt.startOfDay(System.currentTimeMillis()) + target * GuideDaysAdapter.DAY_MS
-        daysAdapter.select(target)
-        guideRowsAdapter.setDayStart(dayStart)
-        timeRuler.setDayStart(dayStart)
-        loadGuidePrograms(groupsAdapter.selectedIndex())
-    }
-
     private fun scrollTimelineToNow() {
         val now = System.currentTimeMillis()
         guideRowsAdapter.setViewport(programsList.width)
-        if (now !in dayStart until dayStart + GuideDaysAdapter.DAY_MS) {
+        if (now < gridStart || now > gridStart + loadedDays * GuideRowsAdapter.DAY_MS) {
             guideRowsAdapter.setOffset(0)
             return
         }
@@ -535,7 +574,7 @@ class MainActivity : AppCompatActivity() {
             nowLine.visible(false)
             return
         }
-        if (now < dayStart || now > dayStart + GuideDaysAdapter.DAY_MS) {
+        if (now < gridStart || now > gridStart + loadedDays * GuideRowsAdapter.DAY_MS) {
             nowLine.visible(false)
             return
         }
@@ -735,7 +774,7 @@ class MainActivity : AppCompatActivity() {
         if (viewport <= 0) return now
         val offset = guideRowsAdapter.currentOffset()
         if (guideRowsAdapter.pixelForTime(now) in offset..(offset + viewport)) return now
-        return dayStart + (offset + 1).toLong() * 3_600_000L / guideRowsAdapter.hourWidthPx()
+        return gridStart + (offset + 1).toLong() * 3_600_000L / guideRowsAdapter.hourWidthPx()
     }
 
     /**
@@ -1166,7 +1205,7 @@ class MainActivity : AppCompatActivity() {
      */
     private fun focusGuide() {
         if (currentChannels.isEmpty()) {
-            focusFirst(daysList)
+            focusList(guideChannelsList)
             return
         }
         prepareGuideFocus()
@@ -1181,10 +1220,9 @@ class MainActivity : AppCompatActivity() {
             focusList(guideChannelsList, index)
             return
         }
-        // Another day can be on the axis, and then "now" is not part of it: the start of that day is
-        // the leftmost thing the user can see, so that is what the crosshair lands on.
-        val now = System.currentTimeMillis()
-        val time = if (now in dayStart until dayStart + GuideDaysAdapter.DAY_MS) now else dayStart
+        // The axis always starts at today, so "now" is on it. It stays the landing point even while the grid
+        // is scrolled somewhere else, because that is where the guide opens.
+        val time = System.currentTimeMillis()
         val program = programAt(channel, time)
         if (program == null) {
             focusList(guideChannelsList, index)
@@ -1352,9 +1390,11 @@ class MainActivity : AppCompatActivity() {
     }
 
     private var flingVelocity = 0f
+    private var flingStart = 0
 
     private fun flingTimeline(velocityX: Float) {
-        flingVelocity = velocityX
+        flingVelocity = velocityX.coerceIn(-MAX_FLING_PX_PER_SEC, MAX_FLING_PX_PER_SEC)
+        flingStart = guideRowsAdapter.currentOffset()
         if (kotlin.math.abs(flingVelocity) < MIN_FLING_PX_PER_SEC) {
             flingVelocity = 0f
             settleTimeline()
@@ -1363,6 +1403,13 @@ class MainActivity : AppCompatActivity() {
         Choreographer.getInstance().postFrameCallback(flingStep)
     }
 
+    /**
+     * A release of the finger glides on for a moment and then rests. The range it may travel is
+     * limited to a fraction of a day: the axis carries several days now, and an unbounded glide
+     * would throw the user from today into the middle of next week before they could see anything.
+     * It also stops as soon as the grid cannot move any further, so the end of the loaded range is
+     * never crossed by simply letting go.
+     */
     private val flingStep = object : Choreographer.FrameCallback {
         override fun doFrame(frameTimeNanos: Long) {
             if (flingVelocity == 0f) return
@@ -1370,7 +1417,11 @@ class MainActivity : AppCompatActivity() {
             advanceTimelineBy(flingVelocity.toInt())
             flingVelocity *= FLING_DECAY
             val stuck = guideRowsAdapter.currentOffset() == before
-            if (stuck || kotlin.math.abs(flingVelocity) < MIN_FLING_PX_PER_SEC) {
+            val travelled = guideRowsAdapter.currentOffset() - flingStart
+            if (stuck ||
+                kotlin.math.abs(travelled) > guideRowsAdapter.hourWidthPx() * MAX_FLING_HOURS ||
+                kotlin.math.abs(flingVelocity) < MIN_FLING_PX_PER_SEC
+            ) {
                 flingVelocity = 0f
                 settleTimeline()
                 return
@@ -1541,16 +1592,15 @@ class MainActivity : AppCompatActivity() {
 
     /**
      * Plays the channel the remote stands on. Inside the open guide the centre key always means
-     * "watch this", wherever the focus happens to sit: the focused row of the channel column, the
-     * row of the crosshair, or - while the focus is still up on the days strip - the row the
-     * crosshair is on. Waiting for the focus to reach the row is what made the first press look
-     * like a focus move, and the day is picked with left and right anyway, see [selectDay].
+     * "watch this", wherever the focus happens to sit: the focused row of the channel column or the
+     * row of the crosshair. Waiting for the focus to reach the row is what made the first press look
+     * like a focus move.
      * Outside the guide the key is left alone, so the categories and the menu keep their meaning.
      */
     private fun switchChannelFromRemote(): Boolean {
         if (leftStage != STAGE_CONTENT) return false
         val grid = programsList.hasFocus()
-        if (!grid && !guideChannelsList.hasFocus() && !daysList.hasFocus()) return false
+        if (!grid && !guideChannelsList.hasFocus()) return false
         val focusedRow = focusedChannelRow()
         val position = when {
             grid -> guideRowsAdapter.focusedChannelPosition()
@@ -1606,10 +1656,6 @@ class MainActivity : AppCompatActivity() {
                 return true
             }
             KeyEvent.KEYCODE_DPAD_LEFT -> {
-                if (daysList.hasFocus()) {
-                    selectDay(daysAdapter.selectedIndex() - 1)
-                    return true
-                }
                 if (leftStage == STAGE_MENU) return true
                 if (leftStage == STAGE_CONTENT && programsList.hasFocus()) {
                     moveCrosshair(-1)
@@ -1619,16 +1665,12 @@ class MainActivity : AppCompatActivity() {
                 return true
             }
             KeyEvent.KEYCODE_DPAD_RIGHT -> {
-                if (daysList.hasFocus()) {
-                    selectDay(daysAdapter.selectedIndex() + 1)
-                    return true
-                }
                 if (leftStage != STAGE_CONTENT) {
                     closeLeftColumn()
                     return true
                 }
                 // From the channel column the right key belongs to the grid, so the crosshair can
-                // enter it; only the days strip and an open column keep the timeline shortcut.
+                // enter it; an open column keeps the timeline shortcut instead.
                 if (guideChannelsList.hasFocus()) return false
                 if (programsList.hasFocus()) {
                     moveCrosshair(1)
@@ -1645,7 +1687,7 @@ class MainActivity : AppCompatActivity() {
                     if (guideRowsAdapter.hasCrosshair() && !guideRowsAdapter.hasCellAbove()) return true
                     return !stepCrosshair(-1)
                 }
-                if (leftStage == STAGE_CONTENT && !daysList.hasFocus()) {
+                if (leftStage == STAGE_CONTENT) {
                     scrollTimeline(-TIMELINE_STEP_HOURS)
                     return true
                 }
@@ -1710,7 +1752,6 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
         const val REQUEST_ADD_PLAYLIST = 501
-        private const val GUIDE_DAYS = 7
         private const val GUIDE_CACHE_MAX = 6
         private const val STAGE_CONTENT = 0
         private const val STAGE_GROUPS = 1
@@ -1718,6 +1759,10 @@ class MainActivity : AppCompatActivity() {
         private const val TIMELINE_STEP_HOURS = 2
             private const val NOW_LINE_MARGIN = 0.12f
         private const val MIN_FLING_PX_PER_SEC = 350f
+        /** Top speed of a fling: a brisk swipe must not turn into a jump over several days. */
+        private const val MAX_FLING_PX_PER_SEC = 3200f
+        /** How far a single fling may travel, in hours of the axis. */
+        private const val MAX_FLING_HOURS = 6
 
         private const val FLING_DECAY = 0.95f
     /** A slow box can need a few layout passes before the row and the window agree on the focus. */

@@ -46,7 +46,10 @@
     <dimen name="nav_strip_width">92dp</dimen>
     <dimen name="guide_channel_column">168dp</dimen>
     <dimen name="epg_cell_margin">1dp</dimen>
-    <dimen name="epg_ruler_height">26dp</dimen>
+    <!-- Three lines of scale: the day (weekday above date) in the upper left corner, the hours along
+         the lower edge. The corner of the channel column and the button that opens the groups column
+         use the same height, so all three keep sharing one top edge. -->
+    <dimen name="epg_ruler_height">46dp</dimen>
     <!-- Group names are the longest text of the left columns and mostly come from a playlist
          abroad, so the column gets more room than the channel list next to it. -->
     <dimen name="groups_column_width">190dp</dimen>
@@ -61,6 +64,8 @@
     <item name="guide_info_panel_height" format="float" type="dimen">0.3</item>
     <dimen name="guide_info_placeholder_size">56dp</dimen>
     <dimen name="epg_ruler_text">12sp</dimen>
+<dimen name="epg_ruler_day_name">15sp</dimen>
+<dimen name="epg_ruler_day_date">13sp</dimen>
     <dimen name="epg_ruler_tick">1dp</dimen>
     <dimen name="epg_now_line">3dp</dimen>
 </resources>
