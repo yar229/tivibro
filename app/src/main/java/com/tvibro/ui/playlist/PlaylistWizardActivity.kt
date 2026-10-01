@@ -5,11 +5,14 @@ import android.content.Intent
 import android.os.Bundle
 import android.text.InputType
 import android.view.View
+import android.view.ViewGroup
 import android.widget.EditText
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import androidx.core.view.updateLayoutParams
 import androidx.core.widget.TextViewCompat
 import com.tvibro.R
 import com.tvibro.TvBroApp
@@ -38,6 +41,7 @@ class PlaylistWizardActivity : AppCompatActivity() {
     private lateinit var messageView: TextView
     private lateinit var typeView: TextView
     private lateinit var fieldsView: LinearLayout
+    private lateinit var fieldsScroll: ScrollView
     private lateinit var statusView: TextView
     private lateinit var testButton: View
     private lateinit var okButton: TextView
@@ -68,6 +72,7 @@ class PlaylistWizardActivity : AppCompatActivity() {
         messageView = findViewById(R.id.wizard_message)
         typeView = findViewById(R.id.wizard_type)
         fieldsView = findViewById(R.id.wizard_fields)
+        fieldsScroll = findViewById(R.id.wizard_fields_scroll)
         statusView = findViewById(R.id.wizard_status)
         testButton = findViewById(R.id.button_test)
         okButton = findViewById(R.id.button_ok)
@@ -182,12 +187,47 @@ class PlaylistWizardActivity : AppCompatActivity() {
             }
         }
         messageView.visible(true)
+        capFieldsToWindow()
         // Only editing can change the type of a stored playlist, and there it is offered right on
         // the form: picking another one re-renders the fields and keeps the values that still fit.
         typeView.visible(editing != null)
         updateTypeLabel()
         testButton.visible(true)
         okButton.setText(if (editing != null) R.string.save else R.string.add)
+    }
+
+    /**
+     * Keeps the whole form inside the window.
+     *
+     * The window is a floating one, so its height follows its content - and the content grows with
+     * the fields of the chosen type. A portal playlist with a large font did not fit on the tablet:
+     * the bottom of the window was cut off and the buttons, the last thing in the layout, were
+     * clipped to their top edge. The fields are the part that may give way, so the scroller around
+     * them is shortened by exactly the overflow and never below one field: the form stays complete,
+     * the button row keeps its full height, and the rest is reached by scrolling.
+     *
+     * Measured after the layout, because only then the height the fields ask for is known.
+     */
+    private fun capFieldsToWindow() {
+        fieldsScroll.post {
+            val root = findViewById<ViewGroup>(R.id.wizard_root)
+            // Everything but the fields: they are the part that gives way. The scroller measures the
+            // fields without a limit, so their height is the height the form would like to have.
+            var chrome = root.paddingTop + root.paddingBottom
+            for (index in 0 until root.childCount) {
+                val child = root.getChildAt(index)
+                val params = child.layoutParams as? ViewGroup.MarginLayoutParams
+                val margins = (params?.topMargin ?: 0) + (params?.bottomMargin ?: 0)
+                chrome += if (child === fieldsScroll) margins else child.height + margins
+            }
+            val room = (resources.displayMetrics.heightPixels * WINDOW_MAX_HEIGHT).toInt() - chrome
+            // Never below one field: a sliver of a scroller is worse than a window slightly too tall.
+            val oneField = if (fieldsView.childCount > 0) fieldsView.getChildAt(0).height else 0
+            val floor = oneField.coerceAtLeast(fieldsScroll.minimumHeight)
+            val height = fieldsView.height.coerceAtMost(room.coerceAtLeast(floor))
+            if (fieldsScroll.height == height) return@post
+            fieldsScroll.updateLayoutParams { this.height = height }
+        }
     }
 
     private fun updateTypeLabel() {
@@ -393,6 +433,12 @@ class PlaylistWizardActivity : AppCompatActivity() {
     companion object {
         const val EXTRA_CHANNELS = "channels"
         const val EXTRA_PLAYLIST_ID = "playlist_id"
+
+        /**
+         * Part of the screen height the window may take at most. The floating window follows its
+         * content, so without a bound the form grows until its bottom is off the screen.
+         */
+        private const val WINDOW_MAX_HEIGHT = 0.9f
 
         fun start(activity: Activity) {
             activity.startActivity(Intent(activity, PlaylistWizardActivity::class.java))

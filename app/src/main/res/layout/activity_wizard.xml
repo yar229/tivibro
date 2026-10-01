@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/wizard_root"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:minWidth="480dp"
@@ -39,18 +40,32 @@
         android:visibility="gone"
         tools:text="Type: Xtream Codes" />
 
-    <LinearLayout
-        android:id="@+id/wizard_fields"
+    <!-- The fields grow with the chosen type and are the only part of the form that may give way: the
+         scroller around them is capped in code to what the window has room for, so the button row
+         below always keeps its full height and its text stays whole. -->
+    <ScrollView
+        android:id="@+id/wizard_fields_scroll"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="@dimen/spacing_md"
-        android:orientation="vertical" />
+        android:clipToPadding="false"
+        android:scrollbars="none">
 
+        <LinearLayout
+            android:id="@+id/wizard_fields"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical" />
+    </ScrollView>
+
+    <!-- The buttons are the last thing in the layout and were the first to be cut off, so the row
+         keeps a full touch target even if the window has to give height to the fields above. -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="@dimen/spacing_lg"
-        android:gravity="end"
+        android:minHeight="@dimen/touch_target"
+        android:gravity="end|center_vertical"
         android:orientation="horizontal">
 
         <TextView
@@ -68,6 +83,9 @@
             style="@style/TvBro.Button.Text"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:gravity="center_vertical"
             android:text="@string/test_connection"
             android:visibility="gone" />
 
@@ -76,6 +94,9 @@
             style="@style/TvBro.Button.Text"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:gravity="center_vertical"
             android:text="@string/cancel" />
 
         <Button
@@ -84,6 +105,9 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginStart="@dimen/spacing_md"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:gravity="center_vertical"
             android:text="@string/next" />
     </LinearLayout>
 </LinearLayout>

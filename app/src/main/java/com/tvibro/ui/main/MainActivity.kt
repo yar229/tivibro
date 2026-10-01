@@ -82,9 +82,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var statusText: TextView
     private lateinit var statusEpg: TextView
     private lateinit var clockView: TextView
-    private lateinit var clockDateView: TextView
-    private lateinit var titleView: TextView
-    private lateinit var subtitleView: TextView
 
     private val executor = Executors.newSingleThreadExecutor { r -> Thread(r, "tvibro-main").apply { isDaemon = true } }
     // A whole day of EPG for a large group is a heavy query, it must not block channel loading
@@ -118,7 +115,7 @@ class MainActivity : AppCompatActivity() {
     private var playerLaunched = false
     private var lastExitPress = 0L
     private var clockFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
-    private var dateFormat = SimpleDateFormat("EEE, d MMM", Locale.getDefault())
+    
     private var isRefreshing = false
     private var tapDownX = 0f
     private var tapDownY = 0f
@@ -332,9 +329,6 @@ class MainActivity : AppCompatActivity() {
         statusText = findViewById(R.id.status_text)
         statusEpg = findViewById(R.id.status_epg)
         clockView = findViewById(R.id.clock)
-        clockDateView = findViewById(R.id.clock_date)
-        titleView = findViewById(R.id.title)
-        subtitleView = findViewById(R.id.subtitle)
     }
 
     private fun buildMenuStrip() {
@@ -377,9 +371,7 @@ class MainActivity : AppCompatActivity() {
     private fun updateClock() {
         val now = System.currentTimeMillis()
         clockView.visible(prefs.showClock)
-        clockDateView.visible(prefs.showClock && prefs.showDate)
         clockView.text = clockFormat.format(Date(now))
-        clockDateView.text = dateFormat.format(Date(now))
         positionNowLine()
         updateGuideInfo()
     }
@@ -409,8 +401,6 @@ class MainActivity : AppCompatActivity() {
     private fun onCategorySelected(index: Int, force: Boolean = false) {
         val category = categories.getOrNull(index) ?: return
         groupsAdapter.select(index)
-        titleView.text = category.playlistName.ifEmpty { category.name }
-        subtitleView.text = if (category.playlistName.isNotEmpty()) category.name else getString(R.string.app_name)
         val sort = prefsFor(category)
         executor.execute {
             val channels = when (category.filter) {
