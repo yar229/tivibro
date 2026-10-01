@@ -48,6 +48,12 @@ class GuideRowsAdapter(
     private var focusedCell: Program? = null
     private var cellMargin = 0
     private val rows = ArrayList<RowHolder>()
+    /** Part of the axis the rows are built for, in grid pixels. */
+    private var windowFrom = 0
+    private var windowTo = 0
+    /** Spare cells kept for the next rebuild: inflating them again on every scroll frame is the
+     *  single most expensive thing a row does. */
+    private val cellPool = ArrayList<View>()
 
     private val dayWidth get() = hourWidth * HOURS_IN_DAY
     private val gridWidth get() = dayWidth * loadedDays
@@ -60,12 +66,17 @@ class GuideRowsAdapter(
         var filledDay: Long = 0L
         var filledDays: Int = 0
         var filledHighlight: Boolean = false
+        var builtFrom: Int = 0
+        var builtTo: Int = 0
     }
 
     fun setData(newChannels: List<Channel>, newPrograms: Map<Long, List<Program>>) {
         channels = newChannels
         programs = newPrograms
         recomputeContentRange()
+        // The rows are rebuilt by the data set change right below, so the window only has to be
+        // brought up to date here - refilling now would build every row twice.
+        updateWindow(refill = false)
         // The cells are rebuilt from scratch, so a selection from the previous data cannot survive.
         clearSelection()
         focusedChannel = RecyclerView.NO_POSITION
@@ -78,6 +89,7 @@ class GuideRowsAdapter(
         gridStart = start
         loadedDays = days.coerceIn(1, MAX_DAYS)
         recomputeContentRange()
+        updateWindow(refill = false)
         notifyDataSetChanged()
     }
 
@@ -116,6 +128,31 @@ class GuideRowsAdapter(
         if (viewport == width) return
         viewport = width
         setOffset(offset)
+    }
+
+    /**
+     * Range of the axis the rows are built for: the visible part plus [WINDOW_MARGIN_HOURS] on both
+     * sides. Rows only hold cells inside it, so the number of cells in a row follows what the window
+     * shows instead of the length of the whole range. Without that a row of seven days carried every
+     * programme of that channel - hundreds of views - and building them on the way into a new row is
+     * what made the vertical scroll stutter.
+     */
+    private fun updateWindow(refill: Boolean = true) {
+        val margin = hourWidth * WINDOW_MARGIN_HOURS
+        val from = (offset - margin).coerceAtLeast(0)
+        val to = (offset + viewport + margin).coerceAtMost(gridWidth)
+        if (from == windowFrom && to == windowTo) return
+        windowFrom = from
+        windowTo = to
+        if (refill) refillRows()
+    }
+
+    /** Rebuilds the attached rows whose built range no longer covers the window. */
+    private fun refillRows() {
+        for (holder in rows) {
+            if (holder.builtFrom <= windowFrom && holder.builtTo >= windowTo) continue
+            fill(holder, holder.filledList.orEmpty())
+        }
     }
 
     fun hourWidthPx(): Int = hourWidth
@@ -368,6 +405,10 @@ class GuideRowsAdapter(
         offset = pixel.coerceIn(minOffset(), maxOffset())
         val shift = -offset.toFloat()
         rows.forEach { it.content.translationX = shift }
+        // Rows keep the cells of the range they were built for, so they are rebuilt once the window
+        // has moved out of it. This is a plain layout pass over the attached rows, which is far
+        // cheaper than holding every programme of every loaded day in every row.
+        updateWindow()
         onOffsetChanged()
     }
 
@@ -413,7 +454,9 @@ class GuideRowsAdapter(
             holder.filledList !== list ||
             holder.filledDay != gridStart ||
             holder.filledDays != loadedDays ||
-            holder.filledHighlight != highlightCurrent
+            holder.filledHighlight != highlightCurrent ||
+            holder.builtFrom > windowFrom ||
+            holder.builtTo < windowTo
         ) {
             fill(holder, list)
         }
@@ -437,22 +480,37 @@ class GuideRowsAdapter(
         val content = holder.content
         val inflater = LayoutInflater.from(content.context)
         val margin = content.resources.getDimensionPixelSize(R.dimen.epg_cell_margin) * 2
-        content.removeAllViews()
-        var cursor = 0
+        // The row is padded out to the full range anyway, so that filler costs one empty view.
+        for (index in content.childCount - 1 downTo 0) {
+            val child = content.getChildAt(index)
+            if (child.tag is Program && cellPool.size < CELL_POOL_MAX) cellPool += child
+            content.removeViewAt(index)
+        }
+        var cursor = windowFrom
+        if (cursor > 0) addFiller(content, cursor)
         for (program in list) {
             val from = pixelForTime(program.start)
             val to = pixelForTime(program.stop)
-            if (to <= 0 || from >= gridWidth) continue
+            // Outside the built range on either side: the row keeps its place on the axis through the
+            // padding, so what is skipped here is never looked at until the row is built again. The
+            // cell the crosshair sits on is the one exception, it has to survive every rebuild or the
+            // remote would lose its place in the middle of a scroll.
+            val focused = holder.channelPosition == focusedChannel && program === focusedCell
+            if (!focused &&
+                (to <= windowFrom || from >= windowTo || from >= gridWidth)
+            ) continue
             val start = from.coerceIn(0, gridWidth)
             // Cells are placed at their real start time instead of being laid out back to back,
             // otherwise the row drifts against the time axis and the current time marker ends up
             // in the wrong place. Gaps between programmes become invisible filler.
+            if (start < cursor) cursor = start
             if (start > cursor) {
                 addFiller(content, start - cursor)
                 cursor = start
             }
-            val width = (to.coerceIn(start + 1, gridWidth) - start).coerceAtLeast(1)
-            val cell = inflater.inflate(R.layout.item_epg_program, content, false)
+            val right = if (focused) gridWidth else windowTo
+            val width = (to.coerceIn(start + 1, right) - start).coerceAtLeast(1)
+            val cell = takeCell(inflater, content)
             cell.layoutParams = LinearLayout.LayoutParams(
                 (width - margin).coerceAtLeast(1),
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -497,7 +555,14 @@ class GuideRowsAdapter(
         holder.filledDay = gridStart
         holder.filledDays = loadedDays
         holder.filledHighlight = highlightCurrent
+        holder.builtFrom = windowFrom
+        holder.builtTo = windowTo
     }
+
+    /** A cell from the pool when there is one, a fresh view otherwise. */
+    private fun takeCell(inflater: LayoutInflater, parent: ViewGroup): View =
+        if (cellPool.isEmpty()) inflater.inflate(R.layout.item_epg_program, parent, false)
+        else cellPool.removeAt(cellPool.size - 1)
 
     private fun addFiller(content: LinearLayout, width: Int) {
         val filler = View(content.context)
@@ -509,5 +574,8 @@ class GuideRowsAdapter(
         const val HOURS_IN_DAY = 24
         const val INITIAL_DAYS = 2
         const val MAX_DAYS = 7
+        /** Hours of the axis built around the visible window on both sides. */
+        private const val WINDOW_MARGIN_HOURS = 2
+        private const val CELL_POOL_MAX = 120
     }
 }
