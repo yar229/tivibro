@@ -1882,7 +1882,12 @@ class MainActivity : AppCompatActivity() {
                     // and both lists move together. Only the real end of the list stops it, so the
                     // focus can never wander off into the bars around the guide.
                     if (guideRowsAdapter.hasCrosshair() && !guideRowsAdapter.hasCellAbove()) return true
-                    return !stepCrosshair(-1)
+                    // The key is answered by the step itself, exactly as the down key does it.
+                    // Handing a successful step back runs the focus search on an event that is
+                    // still being dispatched, and the search then picks a second cell of its own:
+                    // on a row of stand-in cells there is nothing for it to find, so the remote
+                    // ended up wherever the search walked to instead of on the row above.
+                    if (stepCrosshair(-1)) return true
                 }
                 // The columns are lists like the grid, and the up key walks them. Eating it here
                 // scrolled the time axis instead, which is why the previous channel could not be
