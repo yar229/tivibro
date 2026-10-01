@@ -25,9 +25,7 @@ class Prefs private constructor(context: Context) {
         get() = sp.getBoolean(KEY_SHOW_CLOCK, true)
         set(v) = sp.edit { putBoolean(KEY_SHOW_CLOCK, v) }
 
-    var showDate: Boolean
-        get() = sp.getBoolean(KEY_SHOW_DATE, false)
-        set(v) = sp.edit { putBoolean(KEY_SHOW_DATE, v) }
+    
 
     /** 0=top-left 1=top-right 2=bottom-left 3=bottom-right */
     var clockPosition: Int
@@ -511,7 +509,6 @@ class Prefs private constructor(context: Context) {
         // backup keys
         const val KEY_LANGUAGE = "language"
         const val KEY_SHOW_CLOCK = "show_clock"
-        const val KEY_SHOW_DATE = "show_date"
         const val KEY_CLOCK_POSITION = "clock_position"
         const val KEY_COLOR_THEME = "color_theme"
         const val KEY_ACCENT_COLOR = "accent_color"

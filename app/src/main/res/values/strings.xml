@@ -429,7 +429,7 @@
     <string name="system_language">System</string>
     <string name="clock">Clock</string>
     <string name="show_clock">Show clock</string>
-    <string name="show_date">Show date on clock</string>
+    
     <string name="clock_position">Position</string>
     <string name="top_left">Top left</string>
     <string name="top_right">Top right</string>

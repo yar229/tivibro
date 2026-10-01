@@ -408,7 +408,7 @@
     <string name="system_language">Системный</string>
     <string name="clock">Часы</string>
     <string name="show_clock">Показывать часы</string>
-    <string name="show_date">Показывать дату на часах</string>
+    
     <string name="clock_position">Положение</string>
     <string name="top_left">Сверху слева</string>
     <string name="top_right">Сверху справа</string>

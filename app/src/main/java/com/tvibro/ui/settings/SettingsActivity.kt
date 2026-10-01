@@ -191,7 +191,6 @@ class SettingsActivity : AppCompatActivity() {
             ))
             add(SettingItem.Header(getString(R.string.appearance)))
             add(switchItem(R.string.show_clock) { prefs.showClock })
-            add(switchItem(R.string.show_date) { prefs.showDate })
             add(SettingItem.Choice(
                 getString(R.string.clock_position),
                 entries = listOf(
@@ -576,7 +575,6 @@ class SettingsActivity : AppCompatActivity() {
     private fun getterSetterMap(titleId: Int, value: Boolean) {
         when (titleId) {
             R.string.show_clock -> prefs.showClock = value
-            R.string.show_date -> prefs.showDate = value
             R.string.animated_transition -> prefs.animatedTransition = value
             R.string.update_on_app_start -> prefs.updateOnStart = value
             R.string.update_on_playlists_change -> prefs.updateOnChange = value

@@ -30,6 +30,10 @@ object Fmt {
     fun dayName(timeMs: Long, locale: Locale): String =
         SimpleDateFormat("EEEE", locale).format(Date(timeMs))
 
+    /** Day number and month, e.g. "12 Oct" / "12 окт": the second line of the scale day. */
+    fun dayDate(timeMs: Long, locale: Locale): String =
+        SimpleDateFormat("d MMM", locale).format(Date(timeMs))
+
     fun relativeDay(timeMs: Long, locale: Locale): String {
         val today = startOfDay(System.currentTimeMillis())
         val target = startOfDay(timeMs)

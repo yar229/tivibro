@@ -7,80 +7,9 @@
     android:orientation="vertical"
     android:keepScreenOn="true">
 
-    <!-- Top bar -->
-    <LinearLayout
-        android:id="@+id/top_bar"
-        android:layout_width="match_parent"
-        android:layout_height="@dimen/header_height"
-        android:gravity="center_vertical"
-        android:orientation="horizontal"
-        android:paddingStart="@dimen/spacing_lg"
-        android:paddingEnd="@dimen/spacing_lg"
-        android:background="@drawable/osd_scrim_bottom">
-
-        <ImageView
-            android:id="@+id/app_logo"
-            android:layout_width="28dp"
-            android:layout_height="28dp"
-            android:contentDescription="@string/app_name"
-            android:src="@drawable/ic_live_tv"
-            app:tint="@color/accent" />
-
-        <LinearLayout
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:layout_marginStart="@dimen/spacing_md"
-            android:orientation="vertical">
-
-            <TextView
-                android:id="@+id/title"
-                style="@style/TvBro.Text.Title"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/app_name" />
-
-            <TextView
-                android:id="@+id/subtitle"
-                style="@style/TvBro.Text.Time"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                tools:text="1st Playlist / Sports" />
-        </LinearLayout>
-
-        <androidx.recyclerview.widget.RecyclerView
-            android:id="@+id/days_list"
-            android:layout_width="wrap_content"
-            android:layout_height="match_parent"
-            android:layout_marginStart="@dimen/spacing_md"
-            android:layout_marginEnd="@dimen/spacing_md"
-            android:clipToPadding="false"
-            android:nextFocusDown="@id/guide_channels_list"
-            android:scrollbars="none" />
-
-        <LinearLayout
-            android:id="@+id/clock_container"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="@dimen/spacing_lg"
-            android:gravity="end"
-            android:orientation="vertical">
-
-            <TextView
-                android:id="@+id/clock"
-                style="@style/TvBro.Text.Title"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                tools:text="20:15" />
-
-            <TextView
-                android:id="@+id/clock_date"
-                style="@style/TvBro.Text.Time"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                tools:text="Sat, 12 Oct" />
-        </LinearLayout>
-    </LinearLayout>
+    <!-- No top bar: the logo, the app name and the playlist/category line took a whole strip for
+         information the guide does not need. The current time sits next to the name of the
+         programme below instead, and the day is written on the scale of the grid itself. -->
 
     <!-- Programme details and the picture of the running stream, a strip of its own above the
          guide: it must never cover the grid. Its height is a fraction of the screen (a bit less
@@ -136,14 +65,34 @@
                 android:layout_height="wrap_content"
                 android:orientation="vertical">
 
-                <TextView
-                    android:id="@+id/guide_info_title"
-                    style="@style/TvBro.Text.Title"
+                <!-- Name of the programme on the left, the current time on the right of it: both belong together,
+                     and the date is not repeated here because the scale of the grid carries the day. -->
+                <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:maxWidth="@dimen/guide_info_title_width"
-                    android:textSize="@dimen/text_lg"
-                    tools:text="Live: Premier League" />
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:id="@+id/guide_info_title"
+                        style="@style/TvBro.Text.Title"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:ellipsize="end"
+                        android:maxWidth="@dimen/guide_info_title_width"
+                        android:singleLine="true"
+                        android:textSize="@dimen/text_lg"
+                        tools:text="Live: Premier League" />
+
+                    <TextView
+                        android:id="@+id/clock"
+                        style="@style/TvBro.Text.Time"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="@dimen/spacing_lg"
+                        tools:text="20:15" />
+                </LinearLayout>
 
                 <!-- Time, how much of it is over and how much is left, the same three parts the
                      bottom panel of the player uses: a bar carries the progress, so no percentage
@@ -344,9 +293,11 @@
                 android:layout_weight="1"
                 android:orientation="vertical">
 
+                <!-- Drawn in place rather than moved over the grid: it repaints on every change of the shared
+                     offset, which is what keeps its ticks and its day label on the same moment. -->
                 <com.tvibro.ui.main.guide.TimeRulerView
                     android:id="@+id/time_ruler"
-                    android:layout_width="wrap_content"
+                    android:layout_width="match_parent"
                     android:layout_height="@dimen/epg_ruler_height"
                     android:focusable="false"
                     android:focusableInTouchMode="false" />
