@@ -146,8 +146,6 @@ private var panelTimeout = 0L
      * that is still loading - which is exactly when the user is waiting to read it.
      */
     private var switchPanelWaitsForPlayback = false
- private var watchStart = 0L
- private var watchTimeMs = 0L
     private var videoHeight = 0
     private var sleepTimerAt = 0L
     private var hidden = false
@@ -512,9 +510,6 @@ captureFontScale(switchAudioCodec) { prefs.bottomPanelFont }
                 playlist = pl
                 program = prog
                 videoHeight = 0
-                watchStart = System.currentTimeMillis()
-                watchTimeMs = 0
-                repo.addHistory(ch.id, 0)
                 val index = channelIds.indexOfFirst { it == ch.id }
                 if (index >= 0) currentIndex = index
                 // A stream that is taken over as it is will not report ready again, so the buffering
@@ -717,7 +712,6 @@ captureFontScale(switchAudioCodec) { prefs.bottomPanelFont }
                     cacheStreamMeta()
                     if (switchPanel.visibility == View.VISIBLE) updateStreamBadges()
                 }
-      if (watchStart > 0 && engine.isPlaying()) watchTimeMs += 1000
       // Keep the EPG progress bars in the channel list moving while it stays open.
       if (sideChannelsVisible && now - lastSideProgramsAt > SIDE_PROGRAMS_REFRESH_MS) {
         refreshSidePrograms()
@@ -1514,10 +1508,12 @@ captureFontScale(switchAudioCodec) { prefs.bottomPanelFont }
 
     private fun saveWatchTime() {
         val ch = channel ?: return
-        if (watchTimeMs <= 1000 || !::engine.isInitialized) return
+        // Playback holds the counter, because the stream may live on in the guide panel after this
+        // window is gone; the watch time of the channel therefore has to be read from there.
+        val watched = Playback.watchedMs()
+        if (watched <= 1000 || !::engine.isInitialized) return
         executor.execute {
-            repo.addWatchTime(ch.id, watchTimeMs)
-            repo.addHistory(ch.id, watchTimeMs)
+            repo.addWatchTime(ch.id, watched)
             repo.setProgress(ch.id, engine.positionMs(), engine.durationMs())
         }
     }

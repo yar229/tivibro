@@ -13,9 +13,11 @@ import com.tvibro.base.WakeReceiver
 import com.tvibro.data.Prefs
 import com.tvibro.data.db.TvBroRepository
 import com.tvibro.data.source.SourceManager
+import com.tvibro.ui.player.Playback
 import com.tvibro.ui.theme.ThemeMode
 import java.lang.ref.WeakReference
 import java.util.Locale
+import java.util.concurrent.Executors
 
 class TvBroApp : Application() {
 
@@ -30,6 +32,9 @@ class TvBroApp : Application() {
     private var startedActivities = 0
     private val visibleActivities = mutableListOf<WeakReference<Activity>>()
     private var lastNightMode = -1
+    private val io = Executors.newSingleThreadExecutor { r ->
+        Thread(r, "tvibro-io").apply { isDaemon = true }
+    }
 
     /**
      * True while at least one window of this app is on screen.
@@ -53,6 +58,11 @@ class TvBroApp : Application() {
         lastNightMode = resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK
         Notifications.createChannel(this)
         registerActivityLifecycleCallbacks(StartedCounter())
+        // Playback counts how long a channel really played, because the stream outlives the window
+        // it is shown in. The preferences and the database live here, so it is told where to read
+        // the delay from and where to write a channel that has earned its place in the history.
+        Playback.historyDelaySec = { prefs.historyDelaySec }
+        Playback.historyWrite = { id, watched -> io.execute { repo.addHistory(id, watched) } }
         // ACTION_SCREEN_ON is an implicit broadcast that Android 8 no longer delivers to a
         // manifest, so the boxes that report a wake only this way need it registered here. The
         // receiver checks the setting itself, which keeps the preference free to change.
