@@ -72,6 +72,48 @@ class TvBroApp : Application() {
             IntentFilter(Intent.ACTION_SCREEN_ON),
             ContextCompat.RECEIVER_NOT_EXPORTED,
         )
+        startWebApi()
+    }
+
+    private var webApiServer: com.tvibro.api.WebApiServer? = null
+
+    fun startWebApi() {
+        if (!prefs.webApiEnabled) {
+            stopWebApi()
+            return
+        }
+        stopWebApi()
+        val key = ensureApiKey()
+        webApiServer = com.tvibro.api.WebApiServer(this, prefs.webApiPort, key).also { it.start() }
+    }
+
+    fun stopWebApi() {
+        webApiServer?.stop()
+        webApiServer = null
+    }
+
+    fun restartWebApi() {
+        startWebApi()
+    }
+
+    fun regenerateApiKey() {
+        prefs.webApiKey = generateApiKey()
+        prefs.webApiKeyGenerated = true
+        if (prefs.webApiEnabled) startWebApi()
+    }
+
+    private fun ensureApiKey(): String {
+        if (prefs.webApiKey.isEmpty() || !prefs.webApiKeyGenerated) {
+            prefs.webApiKey = generateApiKey()
+            prefs.webApiKeyGenerated = true
+        }
+        return prefs.webApiKey
+    }
+
+    private fun generateApiKey(): String {
+        val bytes = ByteArray(32)
+        java.security.SecureRandom().nextBytes(bytes)
+        return bytes.joinToString("") { "%02x".format(it) }
     }
 
     private inner class StartedCounter : Application.ActivityLifecycleCallbacks {

@@ -148,6 +148,13 @@ class MainActivity : AppCompatActivity() {
 
     private var firstResume = true
     private var pendingAutoPlay = false
+
+    /**
+     * A Web API command that arrived before the channel column held anything to hand.
+     * /play and /next need that list to work out the playlist the player should carry, so a
+     * command that lands during startup waits here until the first reload has filled it.
+     */
+    private var pendingWebApiAction: Intent? = null
     private var playerLaunched = false
     private var lastExitPress = 0L
     private var clockFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
@@ -226,7 +233,13 @@ class MainActivity : AppCompatActivity() {
 
         maybeAutoUpdate()
 
-        if (savedInstanceState == null && prefs.turnOnLastChannel && !playerLaunched) {
+        // A Web API command outranks the last watched channel. The caller named the channel it
+        // wants, so opening that one is the whole point of the request; auto playing the previous
+        // channel underneath it would just fight with it.
+        val webApi = intent?.takeIf { it.getStringExtra("web_api_action") != null }
+        if (webApi != null) {
+            pendingWebApiAction = webApi
+        } else if (savedInstanceState == null && prefs.turnOnLastChannel && !playerLaunched) {
             val lastId = runCatching { repo.lastWatchedChannelId() }.getOrNull()
             if (lastId != null && lastId > 0L) {
                 firstResume = false
@@ -235,6 +248,82 @@ class MainActivity : AppCompatActivity() {
                     .putExtra(PlayerActivity.EXTRA_CHANNEL_ID, lastId)
                 startActivity(intent)
             }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        // A second command may arrive while the first one is still waiting for the channel column.
+        setIntent(intent)
+        handleWebApiIntent(intent)
+    }
+
+    /**
+     * Runs a Web API command against the channel column. Commands that need that list wait for the
+     * first reload to deliver it, because arriving during startup is the normal case: the API sends
+     * the intent straight from its own thread while the guide is still being built.
+     */
+    private fun handleWebApiIntent(intent: Intent) {
+        val action = intent.getStringExtra("web_api_action") ?: return
+        if (currentChannels.isEmpty()) {
+            pendingWebApiAction = intent
+            return
+        }
+        pendingWebApiAction = null
+        runWebApiAction(action, intent)
+    }
+
+    private fun runWebApiAction(action: String, intent: Intent) {
+        when (action) {
+            "play" -> {
+                val id = intent.getLongExtra("web_api_channel_id", -1L)
+                if (id > 0) {
+                    val ch = runCatching { repo.channel(id) }.getOrNull()
+                    if (ch != null) play(ch)
+                }
+            }
+            "stop" -> {
+                if (Playback.inGuide()) {
+                    if (guideEngine != null) stopGuidePlayback() else {
+                        Playback.stop()
+                        attachMiniPlayer()
+                    }
+                }
+            }
+            "next" -> switchChannelByOffset(1)
+            "prev" -> switchChannelByOffset(-1)
+            "remote" -> handleWebApiRemote(intent.getStringExtra("web_api_key").orEmpty())
+        }
+    }
+
+    /** Hands a stored command to the player once the channel column has something to work with. */
+    private fun drainPendingWebApiAction() {
+        val pending = pendingWebApiAction ?: return
+        val action = pending.getStringExtra("web_api_action") ?: run {
+            pendingWebApiAction = null
+            return
+        }
+        pendingWebApiAction = null
+        runWebApiAction(action, pending)
+    }
+
+    private fun switchChannelByOffset(offset: Int) {
+        val current = Playback.channelId()
+        if (current <= 0L) return
+        val index = currentChannels.indexOfFirst { it.id == current }
+        if (index < 0) return
+        val target = index + offset
+        if (target in currentChannels.indices) play(currentChannels[target])
+    }
+
+    private fun handleWebApiRemote(key: String) {
+        when (key) {
+            "up" -> dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_UP))
+            "down" -> dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_DOWN))
+            "left" -> dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_LEFT))
+            "right" -> dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_RIGHT))
+            "ok" -> dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_CENTER))
+            "back" -> dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_BACK))
         }
     }
 
@@ -476,6 +565,9 @@ class MainActivity : AppCompatActivity() {
                     pendingAutoPlay = false
                     autoPlayLastChannel()
                 }
+                // The Web API command that arrived during startup needed this list, so it goes now
+                // that the column finally holds the playlist the player has to carry.
+                if (channels.isNotEmpty()) drainPendingWebApiAction()
                 loadGuidePrograms(index)
             }
         }

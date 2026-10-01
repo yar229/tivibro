@@ -699,10 +699,24 @@
     <string name="player_interface">Интерфейс плеера</string>
     <string name="markers">Подсветка</string>
     <string name="navigation">Навигация</string>
-    <plurals name="settings_items_count">
-        <item quantity="one">%d параметр</item>
-        <item quantity="few">%d параметра</item>
-        <item quantity="many">%d параметров</item>
-        <item quantity="other">%d параметра</item>
-    </plurals>
-</resources>
+<plurals name="settings_items_count">
+          <item quantity="one">%d параметр</item>
+          <item quantity="few">%d параметра</item>
+          <item quantity="many">%d параметров</item>
+          <item quantity="other">%d параметра</item>
+      </plurals>
+
+      <string name="web_api">Web API</string>
+      <string name="web_api_enabled">Включить Web API</string>
+      <string name="web_api_enabled_hint">Разрешить управление плеером по сети</string>
+      <string name="web_api_host">IP-адрес</string>
+      <string name="web_api_host_hint">Адрес, на котором работает сервер</string>
+      <string name="web_api_port">Порт</string>
+      <string name="web_api_key">API-ключ</string>
+      <string name="web_api_key_hint">Требуется для каждого запроса</string>
+      <string name="web_api_generate_key">Сгенерировать API-ключ</string>
+      <string name="web_api_generate_key_hint">Создать новый ключ. Старый перестанет работать.</string>
+      <string name="web_api_docs">Документация API</string>
+      <string name="web_api_docs_hint">Открыть Swagger UI в браузере</string>
+      <string name="copied_to_clipboard">Скопировано в буфер обмена</string>
+  </resources>

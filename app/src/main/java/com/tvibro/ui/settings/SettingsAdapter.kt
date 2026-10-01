@@ -45,7 +45,11 @@ sealed class SettingItem {
         val onClick: () -> Unit,
     ) : SettingItem()
 
-    data class Value(override val title: String, val summary: String = "") : SettingItem()
+    data class Value(
+        override val title: String,
+        val summary: String = "",
+        val onLongAction: (() -> Unit)? = null,
+    ) : SettingItem()
 
     /** Column names of the playlist table; carries no value of its own. */
     data object PlaylistHeader : SettingItem() {
@@ -67,6 +71,7 @@ sealed class SettingItem {
 
 class SettingsAdapter(
     private val onAction: (SettingItem) -> Unit,
+    private val onLongAction: (SettingItem) -> Unit = {},
 ) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
     private var items: List<SettingItem> = emptyList()
@@ -150,6 +155,10 @@ class SettingsAdapter(
             }
             is SettingItem.Value -> {
                 holder.itemView.setOnClickListener { }
+                holder.itemView.setOnLongClickListener {
+                    onLongAction(item)
+                    true
+                }
             }
             is SettingItem.Header -> Unit
             is SettingItem.PlaylistHeader -> Unit

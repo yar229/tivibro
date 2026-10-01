@@ -467,6 +467,29 @@ class Prefs private constructor(context: Context) {
         get() = sp.getInt(KEY_POPUP_TIMEOUT, 10)
         set(v) = sp.edit { putInt(KEY_POPUP_TIMEOUT, v) }
 
+    // ------------------------------------------------------------- web api
+
+    var webApiEnabled: Boolean
+        get() = sp.getBoolean(KEY_WEB_API_ENABLED, false)
+        set(v) = sp.edit { putBoolean(KEY_WEB_API_ENABLED, v) }
+
+    var webApiHost: String
+        get() = sp.getString(KEY_WEB_API_HOST, "") ?: ""
+        set(v) = sp.edit { putString(KEY_WEB_API_HOST, v) }
+
+    var webApiPort: Int
+        get() = sp.getInt(KEY_WEB_API_PORT, 8080)
+        set(v) = sp.edit { putInt(KEY_WEB_API_PORT, v) }
+
+    var webApiKey: String
+        get() = sp.getString(KEY_WEB_API_KEY, "") ?: ""
+        set(v) = sp.edit { putString(KEY_WEB_API_KEY, v) }
+
+    /** True once an api key has been generated, so a later install does not inherit one. */
+    var webApiKeyGenerated: Boolean
+        get() = sp.getBoolean(KEY_WEB_API_KEY_GENERATED, false)
+        set(v) = sp.edit { putBoolean(KEY_WEB_API_KEY_GENERATED, v) }
+
     // --------------------------------------------------------------- helpers
 
     fun stringSet(key: String): Set<String> = sp.getStringSet(key, emptySet()) ?: emptySet()
@@ -634,6 +657,12 @@ class Prefs private constructor(context: Context) {
         const val KEY_REMOTE_MAP = "remote_map"
         const val KEY_BACKUP_PATH = "backup_path"
         const val KEY_LOGOS_CACHE = "logos_cache"
+
+        const val KEY_WEB_API_ENABLED = "web_api_enabled"
+        const val KEY_WEB_API_HOST = "web_api_host"
+        const val KEY_WEB_API_PORT = "web_api_port"
+        const val KEY_WEB_API_KEY = "web_api_key"
+        const val KEY_WEB_API_KEY_GENERATED = "web_api_key_generated"
     }
 }
 

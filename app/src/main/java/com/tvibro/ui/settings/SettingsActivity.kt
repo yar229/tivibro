@@ -62,7 +62,14 @@ class SettingsActivity : AppCompatActivity() {
         scrim.setOnClickListener { close() }
         onBackPressedDispatcher.addCallback(this) { navigateBack() }
 
-        settingsAdapter = SettingsAdapter { item -> onItemClick(item) }
+        settingsAdapter = SettingsAdapter(
+            onAction = { item -> onItemClick(item) },
+            onLongAction = { item ->
+                if (item is SettingItem.Value) {
+                    item.onLongAction?.invoke()
+                }
+            },
+        )
         groupAdapter = SettingsGroupAdapter { position -> openGroup(position) }
         list.layoutManager = LinearLayoutManager(this)
 
@@ -563,6 +570,45 @@ class SettingsActivity : AppCompatActivity() {
             add(SettingItem.Action(getString(R.string.restore_data)) { restore() })
         }
 
+        group(R.string.web_api) {
+            add(switchItem(R.string.web_api_enabled, R.string.web_api_enabled_hint) { prefs.webApiEnabled })
+            add(SettingItem.Value(
+                getString(R.string.web_api_host),
+                com.tvibro.api.WebApiServer.localIpAddress().ifEmpty { "—" },
+            ))
+            add(SettingItem.Number(
+                getString(R.string.web_api_port),
+                min = 1024,
+                max = 65535,
+                get = { prefs.webApiPort },
+                set = {
+                    prefs.webApiPort = it
+                    com.tvibro.TvBroApp.get().restartWebApi()
+                },
+            ))
+            add(SettingItem.Value(
+                getString(R.string.web_api_key),
+                prefs.webApiKey.ifEmpty { getString(R.string.web_api_key_hint) },
+                onLongAction = {
+                    val key = prefs.webApiKey
+                    if (key.isNotEmpty()) {
+                        val clipboard = getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                        clipboard.setPrimaryClip(android.content.ClipData.newPlainText("API key", key))
+                        toast(getString(R.string.copied_to_clipboard))
+                    }
+                },
+            ))
+            add(SettingItem.Action(getString(R.string.web_api_generate_key), getString(R.string.web_api_generate_key_hint)) {
+                com.tvibro.TvBroApp.get().regenerateApiKey()
+                rebuild()
+            })
+            add(SettingItem.Action(getString(R.string.web_api_docs), getString(R.string.web_api_docs_hint)) {
+                val host = com.tvibro.api.WebApiServer.localIpAddress().ifEmpty { "localhost" }
+                val url = "http://$host:${prefs.webApiPort}/api/docs"
+                startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url)))
+            })
+        }
+
         group(R.string.about) {
             add(SettingItem.Value(getString(R.string.version), appVersion()))
             add(SettingItem.Action(getString(R.string.check_for_new_version)) {
@@ -628,6 +674,10 @@ class SettingsActivity : AppCompatActivity() {
             R.string.full_scan -> prefs.epgFullScan = value
             R.string.auto_start_on_boot -> prefs.autoStartOnBoot = value
             R.string.auto_start_on_wake -> prefs.autoStartOnWake = value
+            R.string.web_api_enabled -> {
+                prefs.webApiEnabled = value
+                com.tvibro.TvBroApp.get().restartWebApi()
+            }
             R.string.turn_on_last_channel -> prefs.turnOnLastChannel = value
             R.string.autoplay_channels -> prefs.autoplayChannels = value
             R.string.confirm_exit -> prefs.confirmExit = value

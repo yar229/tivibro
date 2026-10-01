@@ -834,11 +834,25 @@
     <string name="player_interface">Player interface</string>
     <string name="markers">Highlighting</string>
     <string name="navigation">Navigation</string>
-    <plurals name="settings_items_count">
-        <item quantity="one">%d item</item>
-        <item quantity="few">%d items</item>
-        <item quantity="many">%d items</item>
-        <item quantity="other">%d items</item>
-    </plurals>
-</resources>
+<plurals name="settings_items_count">
+          <item quantity="one">%d item</item>
+          <item quantity="few">%d items</item>
+          <item quantity="many">%d items</item>
+          <item quantity="other">%d items</item>
+      </plurals>
+
+      <string name="web_api">Web API</string>
+      <string name="web_api_enabled">Enable Web API</string>
+      <string name="web_api_enabled_hint">Allow controlling the player over the network</string>
+      <string name="web_api_host">IP address</string>
+      <string name="web_api_host_hint">Address the server listens on</string>
+      <string name="web_api_port">Port</string>
+      <string name="web_api_key">API key</string>
+      <string name="web_api_key_hint">Required for every request</string>
+      <string name="web_api_generate_key">Generate API key</string>
+      <string name="web_api_generate_key_hint">Create a new key. The old one stops working.</string>
+      <string name="web_api_docs">API documentation</string>
+      <string name="web_api_docs_hint">Open the Swagger UI in a browser</string>
+      <string name="copied_to_clipboard">Copied to clipboard</string>
+  </resources>
 
