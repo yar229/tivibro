@@ -5,7 +5,13 @@ import fi.iki.elonen.NanoHTTPD
 import com.tvibro.TvBroApp
 import com.tvibro.base.Fmt
 import com.tvibro.data.model.ChannelFilter
+import com.tvibro.data.model.EpgSource
+import com.tvibro.data.model.Playlist
+import com.tvibro.data.model.PlaylistType
 import com.tvibro.data.model.Program
+import com.tvibro.data.source.M3uParser
+import com.tvibro.data.source.StalkerApi
+import com.tvibro.data.source.XtreamApi
 import com.tvibro.ui.main.MainActivity
 import com.tvibro.ui.player.Playback
 import com.tvibro.ui.player.PlayerActivity
@@ -58,6 +64,9 @@ class WebApiServer(
             "/api/channels" -> channels()
             "/api/epg" -> epg(session)
             "/api/history" -> history()
+            "/api/playlists/list" -> playlistsList()
+            "/api/playlists/add" -> playlistsAdd(session)
+            "/api/playlists/remove" -> playlistsRemove(session)
             "/api/play" -> play(session)
             "/api/stop" -> shutdown()
             "/api/next" -> next()
@@ -135,6 +144,119 @@ class WebApiServer(
             arr.put(o)
         }
         return jsonOk(JSONObject().put("history", arr))
+    }
+
+    /**
+     * What is set up: every playlist with its address, how many channels it brought and when it was
+     * last read. The password of an xtream or stalker entry is left out, so the answer is safe to
+     * log or to show in a panel without handing the account over with it.
+     */
+    private fun playlistsList(): Response {
+        val playlists = app.repo.playlists()
+        // One query for the channels of all of them, counted per playlist in memory, rather than a
+        // count query per playlist.
+        val counts = app.repo.channels(playlists.map { it.id }, "", ChannelFilter.ALL, "order")
+            .groupingBy { it.playlistId }.eachCount()
+        val arr = JSONArray()
+        playlists.forEach { p ->
+            val o = JSONObject()
+            o.put("id", p.id)
+            o.put("name", p.name)
+            o.put("type", p.type.name.lowercase())
+            o.put("url", p.url)
+            o.put("epgUrl", p.epgUrl)
+            o.put("login", p.login)
+            o.put("enabled", p.enabled)
+            o.put("hidden", p.hidden)
+            o.put("channels", counts[p.id] ?: 0)
+            // A playlist that has never been read has no time to report, so it answers null rather
+            // than a date in 1970.
+            o.put("lastUpdate", if (p.lastUpdate > 0L) Fmt.isoTime(p.lastUpdate) else JSONObject.NULL)
+            arr.put(o)
+        }
+        return jsonOk(JSONObject().put("playlists", arr))
+    }
+
+    /**
+     * Adds a playlist and brings its channels in, the same way the wizard does. Reading the source
+     * is network work and happens on the thread of this request; the epg afterwards is handed to the
+     * update thread, so it does not hold the answer up.
+     *
+     * Unlike the wizard, a failure takes the half-written entry away again. A wizard leaves its
+     * draft on screen to be corrected, while a caller tends to simply try again, and a leftover
+     * playlist with no channels would then sit in the guide as an empty source.
+     */
+    private fun playlistsAdd(session: IHTTPSession): Response {
+        val url = session.parameters["url"]?.firstOrNull()?.trim().orEmpty()
+        if (url.isEmpty()) return jsonError(Response.Status.BAD_REQUEST, "missing url")
+        val type = parsePlaylistType(session.parameters["type"]?.firstOrNull())
+            .getOrElse { return jsonError(Response.Status.BAD_REQUEST, it.message ?: "unknown type") }
+        val repo = app.repo
+        // A type has its own set of values, so credentials of one type must not end up on another.
+        val login = if (type == PlaylistType.XTREAM) session.parameters["login"]?.firstOrNull().orEmpty() else ""
+        val password = if (type == PlaylistType.XTREAM) session.parameters["password"]?.firstOrNull().orEmpty() else ""
+        val mac = if (type == PlaylistType.STALKER) session.parameters["mac"]?.firstOrNull().orEmpty() else ""
+        val name = session.parameters["name"]?.firstOrNull()?.trim().orEmpty().ifEmpty { url }
+        val id = repo.insertPlaylist(
+            Playlist(
+                name = name, type = type, url = url,
+                login = login, password = password, mac = mac, lastUpdate = 0,
+            )
+        )
+        try {
+            val epg = session.parameters["epg"]?.firstOrNull()?.trim().orEmpty()
+            if (epg.isNotEmpty() && repo.epgSources().none { it.playlistId == id }) {
+                repo.insertEpgSource(EpgSource(name = name, url = epg, playlistId = id))
+            }
+            val channels = when (type) {
+                PlaylistType.XTREAM -> XtreamApi(url, login, password).loadChannels()
+                PlaylistType.STALKER -> StalkerApi(url, mac.ifBlank { null }).loadChannels()
+                else -> M3uParser.parseUrl(url).channels
+            }
+            if (channels.isEmpty()) error("playlist is empty")
+            repo.replaceChannels(id, channels)
+            repo.setPlaylistLastUpdate(id, System.currentTimeMillis())
+            // The epg is bound a few lines above, so this is the one moment where its address is
+            // known and has never been downloaded. The update_change setting decides whether it
+            // runs at all.
+            app.sources.refreshEpgOnChange(id)
+        } catch (e: Exception) {
+            repo.deletePlaylist(id)
+            return jsonError(Response.Status.BAD_REQUEST, e.message ?: "cannot read the playlist")
+        }
+        return jsonOk(JSONObject().put("ok", true).put("id", id).put("name", name))
+    }
+
+    /**
+     * Takes a playlist away with everything that came from it: the channels, their programmes and
+     * the epg source bound to it.
+     */
+    private fun playlistsRemove(session: IHTTPSession): Response {
+        val id = session.parameters["id"]?.firstOrNull()?.toLongOrNull()
+            ?: return jsonError(Response.Status.BAD_REQUEST, "missing id")
+        if (app.repo.playlist(id) == null) return jsonError(Response.Status.NOT_FOUND, "playlist not found")
+        app.repo.deletePlaylist(id)
+        return jsonOk(JSONObject().put("ok", true))
+    }
+
+    /**
+     * The type a caller asked for, by name or by the number the database stores. A local file is
+     * not on offer: reading one would turn this endpoint into a way of having the app open a path
+     * of the caller's choosing, and that stays what the wizard on the device is for. It is a known
+     * type that is refused rather than a misspelt one, so it says so.
+     */
+    private fun parsePlaylistType(raw: String?): Result<PlaylistType> {
+        val type = when (raw?.trim()?.lowercase().orEmpty()) {
+            "", "m3u", "remote_m3u" -> PlaylistType.REMOTE_M3U
+            "xtream", "xtream_codes" -> PlaylistType.XTREAM
+            "stalker", "stalker_portal" -> PlaylistType.STALKER
+            "file", "local" -> PlaylistType.FILE
+            else -> raw?.trim()?.toIntOrNull()?.let { PlaylistType.from(it) }
+        } ?: return Result.failure(IllegalArgumentException("unknown type"))
+        if (type == PlaylistType.FILE) {
+            return Result.failure(IllegalArgumentException("a local file cannot be added over the api"))
+        }
+        return Result.success(type)
     }
 
     private fun play(session: IHTTPSession): Response {
@@ -282,6 +404,76 @@ class WebApiServer(
         historyOp.put("responses", historyResponse)
         paths.put("/history", JSONObject().put("get", historyOp))
 
+        val playlistsListOp = JSONObject()
+            .put("summary", "List all playlists")
+            .put("operationId", "listPlaylists")
+            .put("tags", JSONArray().put("playlists"))
+        val playlistsListSchema = JSONObject().put("type", "object")
+            .put("properties", JSONObject().put("playlists", JSONObject()
+                .put("type", "array")
+                .put("items", JSONObject().put("\$ref", "#/components/schemas/Playlist"))))
+        val playlistsListExample = JSONObject().put("playlists", JSONArray().put(JSONObject()
+            .put("id", 1).put("name", "Home").put("type", "remote_m3u")
+            .put("url", "http://tv.loc/m3u").put("epgUrl", "http://tv.loc/epg.xml")
+            .put("login", "").put("enabled", true).put("hidden", false)
+            .put("channels", 402).put("lastUpdate", "2026-10-02T09:15:00+03:00")))
+        playlistsListOp.put("responses", JSONObject().put("200", JSONObject()
+            .put("description", "Array of playlists")
+            .put("content", JSONObject().put("application/json", JSONObject()
+                .put("schema", playlistsListSchema)
+                .put("example", playlistsListExample)))))
+        paths.put("/playlists/list", JSONObject().put("get", playlistsListOp))
+
+        val playlistsAddOp = JSONObject()
+            .put("summary", "Add a playlist and load its channels")
+            .put("operationId", "addPlaylist")
+            .put("tags", JSONArray().put("playlists"))
+            .put("description", "Reads the source over the network, so the answer waits for it. Nothing is kept if the source turns out to be empty or unreachable, which makes a retry after a wrong address safe.")
+        fun playlistParam(name: String, description: String, type: String, required: Boolean = false) =
+            JSONObject()
+                .put("name", name)
+                .put("in", "query")
+                .put("required", required)
+                .put("description", description)
+                .put("schema", JSONObject().put("type", type))
+        val addParams = JSONArray()
+            .put(playlistParam("url", "Address of the playlist, or the server for xtream and stalker", "string", true))
+            .put(playlistParam("name", "Name shown in the guide, defaults to the url", "string"))
+            .put(playlistParam("type", "Source type: m3u (default), xtream or stalker", "string"))
+            .put(playlistParam("login", "xtream login", "string"))
+            .put(playlistParam("password", "xtream password", "string"))
+            .put(playlistParam("mac", "stalker mac address", "string"))
+            .put(playlistParam("epg", "xmltv url to bind to the playlist", "string"))
+        playlistsAddOp.put("parameters", addParams)
+        playlistsAddOp.put("responses", JSONObject().put("200", JSONObject()
+            .put("description", "Playlist added")
+            .put("content", JSONObject().put("application/json", JSONObject()
+                .put("schema", JSONObject()
+                    .put("type", "object")
+                    .put("properties", JSONObject()
+                        .put("ok", JSONObject().put("type", "boolean"))
+                        .put("id", JSONObject().put("type", "integer").put("format", "int64"))
+                        .put("name", JSONObject().put("type", "string"))))))))
+        paths.put("/playlists/add", JSONObject().put("post", playlistsAddOp))
+
+        val playlistsRemoveOp = JSONObject()
+            .put("summary", "Delete a playlist with its channels and programmes")
+            .put("operationId", "removePlaylist")
+            .put("tags", JSONArray().put("playlists"))
+        val removeParam = JSONObject()
+            .put("name", "id")
+            .put("in", "query")
+            .put("required", true)
+            .put("description", "Playlist ID")
+            .put("schema", JSONObject().put("type", "integer").put("format", "int64"))
+        playlistsRemoveOp.put("parameters", JSONArray().put(removeParam))
+        val removeResponse = JSONObject().put("200", JSONObject()
+            .put("description", "Playlist deleted")
+            .put("content", JSONObject().put("application/json", JSONObject()
+                .put("schema", JSONObject().put("\$ref", "#/components/schemas/OkResponse")))))
+        playlistsRemoveOp.put("responses", removeResponse)
+        paths.put("/playlists/remove", JSONObject().put("post", playlistsRemoveOp))
+
         val playOp = JSONObject()
             .put("summary", "Play a channel")
             .put("operationId", "playChannel")
@@ -388,6 +580,23 @@ class WebApiServer(
             .put("properties", JSONObject()
                 .put("channelId", JSONObject().put("type", "integer").put("format", "int64"))
                 .put("watchedAt", isoTime())))
+        // The password a playlist was added with is deliberately absent: this is what a caller gets
+        // back from the list, and it has no reason to carry the account with it.
+        schemas.put("Playlist", JSONObject().put("type", "object")
+            .put("properties", JSONObject()
+                .put("id", JSONObject().put("type", "integer").put("format", "int64"))
+                .put("name", JSONObject().put("type", "string"))
+                .put("type", JSONObject().put("type", "string")
+                    .put("enum", JSONArray().put("remote_m3u").put("xtream").put("stalker")))
+                .put("url", JSONObject().put("type", "string"))
+                .put("epgUrl", JSONObject().put("type", "string"))
+                .put("login", JSONObject().put("type", "string"))
+                .put("enabled", JSONObject().put("type", "boolean"))
+                .put("hidden", JSONObject().put("type", "boolean"))
+                .put("channels", JSONObject().put("type", "integer"))
+                .put("lastUpdate", JSONObject().put("allOf", JSONArray().put(isoTime()))
+                    .put("nullable", true)
+                    .put("description", "When the channels were last read, or null if never"))))
         schemas.put("OkResponse", JSONObject().put("type", "object")
             .put("properties", JSONObject()
                 .put("ok", JSONObject().put("type", "boolean"))))
