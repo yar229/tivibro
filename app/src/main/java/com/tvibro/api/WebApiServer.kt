@@ -3,7 +3,9 @@ package com.tvibro.api
 import android.content.Intent
 import fi.iki.elonen.NanoHTTPD
 import com.tvibro.TvBroApp
+import com.tvibro.base.Fmt
 import com.tvibro.data.model.ChannelFilter
+import com.tvibro.data.model.Program
 import com.tvibro.ui.main.MainActivity
 import com.tvibro.ui.player.Playback
 import com.tvibro.ui.player.PlayerActivity
@@ -70,24 +72,42 @@ class WebApiServer(
 
     private fun status(): Response {
         val obj = JSONObject()
+        val channelId = Playback.channelId()
         obj.put("playing", Playback.active())
-        obj.put("channelId", Playback.channelId())
+        obj.put("channelId", channelId)
         obj.put("channelName", Playback.channelName())
+        // What is on air on the channel that is playing, so a caller does not have to ask the guide
+        // for it separately. Null while nothing plays or while the guide has nothing for that channel.
+        obj.put("epg", programJson(if (channelId > 0L) app.repo.currentProgram(channelId) else null))
         return jsonOk(obj)
     }
+
+    /**
+     * The programme that is on air right now. A channel the guide says nothing about carries a null
+     * epg rather than no epg at all, so the shape of the answer does not depend on the channel.
+     */
+    private fun programJson(program: Program?): Any =
+        if (program == null) JSONObject.NULL else JSONObject()
+            .put("title", program.title)
+            .put("subtitle", program.subtitle)
+            .put("start", Fmt.isoTime(program.start))
+            .put("stop", Fmt.isoTime(program.stop))
 
     private fun channels(): Response {
         val arr = JSONArray()
         val playlistIds = app.repo.playlists().map { it.id }
-        app.repo
-            .channels(playlistIds, "", ChannelFilter.ALL, "order")
-            .forEach { ch ->
-                val o = JSONObject()
-                o.put("id", ch.id)
-                o.put("name", ch.name)
-                o.put("group", ch.groupTitle)
-                arr.put(o)
-            }
+        val channels = app.repo.channels(playlistIds, "", ChannelFilter.ALL, "order")
+        // One query covers every channel. Asking the guide per channel would mean hundreds of them
+        // for this list, which is slow enough to look like a hung request.
+        val programs = app.repo.programsMapFor(channels.map { it.id }, System.currentTimeMillis())
+        channels.forEach { ch ->
+            val o = JSONObject()
+            o.put("id", ch.id)
+            o.put("name", ch.name)
+            o.put("group", ch.groupTitle)
+            o.put("epg", programJson(programs[ch.id]))
+            arr.put(o)
+        }
         return jsonOk(JSONObject().put("channels", arr))
     }
 
@@ -99,8 +119,8 @@ class WebApiServer(
         app.repo.programsFor(id, now, now + 24 * 60 * 60 * 1000L).forEach { p ->
             val o = JSONObject()
             o.put("title", p.title)
-            o.put("start", p.start)
-            o.put("stop", p.stop)
+            o.put("start", Fmt.isoTime(p.start))
+            o.put("stop", Fmt.isoTime(p.stop))
             arr.put(o)
         }
         return jsonOk(JSONObject().put("epg", arr))
@@ -111,7 +131,7 @@ class WebApiServer(
         app.repo.history().forEach { h ->
             val o = JSONObject()
             o.put("channelId", h.channelId)
-            o.put("watchedAt", h.watchedAt)
+            o.put("watchedAt", Fmt.isoTime(h.watchedAt))
             arr.put(o)
         }
         return jsonOk(JSONObject().put("history", arr))
@@ -152,7 +172,11 @@ class WebApiServer(
         // Sending those to the guide instead meant clearing the player off the top of the stack, and
         // the player it destroyed released the shared engine afterwards, wiping the channel the
         // freshly started one had just put there. The player never opens without a channel to play.
-        val toPlayer = action == "play" || action == "stop" || action == "next" || action == "prev"
+        val toPlayer = action == "play" || action == "stop" || action == "next" || action == "prev" ||
+            // A remote key belongs to the window the user is looking at, and the guide and the player
+            // answer different keys. Sending it to the guide while the player was up built a second
+            // guide on top of it, so the key landed on a window nobody was watching.
+            (action == "remote" && app.focusedActivity is PlayerActivity)
         val intent = Intent(app, if (toPlayer) PlayerActivity::class.java else MainActivity::class.java)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
             .putExtra("web_api_action", action)
@@ -175,6 +199,11 @@ class WebApiServer(
             .put("playing", true)
             .put("channelId", 42)
             .put("channelName", "BBC One")
+            .put("epg", JSONObject()
+                .put("title", "The News")
+                .put("subtitle", "Live")
+                .put("start", "2026-10-02T11:00:00+03:00")
+                .put("stop", "2026-10-02T12:00:00+03:00"))
         val statusContent = JSONObject().put("application/json", JSONObject()
             .put("schema", statusSchema)
             .put("example", statusExample))
@@ -193,7 +222,12 @@ class WebApiServer(
                 .put("type", "array")
                 .put("items", JSONObject().put("\$ref", "#/components/schemas/Channel"))))
         val channelsExample = JSONObject().put("channels", JSONArray().put(JSONObject()
-            .put("id", 1).put("name", "BBC One").put("group", "Entertainment")))
+            .put("id", 1).put("name", "BBC One").put("group", "Entertainment")
+                .put("epg", JSONObject()
+                    .put("title", "The News")
+                    .put("subtitle", "Live")
+                    .put("start", "2026-10-02T11:00:00+03:00")
+                    .put("stop", "2026-10-02T12:00:00+03:00"))))
         val channelsContent = JSONObject().put("application/json", JSONObject()
             .put("schema", channelsSchema)
             .put("example", channelsExample))
@@ -219,7 +253,7 @@ class WebApiServer(
                 .put("type", "array")
                 .put("items", JSONObject().put("\$ref", "#/components/schemas/Program"))))
         val epgExample = JSONObject().put("epg", JSONArray().put(JSONObject()
-            .put("title", "News").put("start", 1693500000000L).put("stop", 1693503600000L)))
+            .put("title", "News").put("start", "2023-09-01T12:00:00+03:00").put("stop", "2023-09-01T13:00:00+03:00")))
         val epgContent = JSONObject().put("application/json", JSONObject()
             .put("schema", epgSchema)
             .put("example", epgExample))
@@ -238,7 +272,7 @@ class WebApiServer(
                 .put("type", "array")
                 .put("items", JSONObject().put("\$ref", "#/components/schemas/HistoryEntry"))))
         val historyExample = JSONObject().put("history", JSONArray().put(JSONObject()
-            .put("channelId", 42).put("watchedAt", 1693500000000L)))
+            .put("channelId", 42).put("watchedAt", "2023-09-01T12:00:00+03:00")))
         val historyContent = JSONObject().put("application/json", JSONObject()
             .put("schema", historySchema)
             .put("example", historyExample))
@@ -319,25 +353,41 @@ class WebApiServer(
         paths.put("/remote", JSONObject().put("post", remoteOp))
 
         val schemas = JSONObject()
+        // Every time the API hands out is ISO 8601 carrying the zone the player is on, so a client
+        // never has to guess it and never has to agree on an epoch with the device.
+        fun isoTime() = JSONObject()
+            .put("type", "string")
+            .put("format", "date-time")
+            .put("example", "2026-10-02T11:00:00+03:00")
+            .put("description", "ISO 8601 date and time with the UTC offset of the player")
+        // A channel with nothing on air answers with a null epg. The reference is wrapped in an
+        // allOf because a sibling of $ref is ignored in OpenAPI 3.0, and nullable has to sit next to it.
+        fun epgRef() = JSONObject()
+            .put("allOf", JSONArray().put(JSONObject().put("\$ref", "#/components/schemas/Program")))
+            .put("nullable", true)
+            .put("description", "The programme on air right now, or null when the guide has none")
         schemas.put("Status", JSONObject().put("type", "object")
             .put("properties", JSONObject()
                 .put("playing", JSONObject().put("type", "boolean"))
                 .put("channelId", JSONObject().put("type", "integer").put("format", "int64"))
-                .put("channelName", JSONObject().put("type", "string"))))
+                .put("channelName", JSONObject().put("type", "string"))
+                .put("epg", epgRef())))
         schemas.put("Channel", JSONObject().put("type", "object")
             .put("properties", JSONObject()
                 .put("id", JSONObject().put("type", "integer").put("format", "int64"))
                 .put("name", JSONObject().put("type", "string"))
-                .put("group", JSONObject().put("type", "string"))))
+                .put("group", JSONObject().put("type", "string"))
+                .put("epg", epgRef())))
         schemas.put("Program", JSONObject().put("type", "object")
             .put("properties", JSONObject()
                 .put("title", JSONObject().put("type", "string"))
-                .put("start", JSONObject().put("type", "integer").put("format", "int64"))
-                .put("stop", JSONObject().put("type", "integer").put("format", "int64"))))
+                .put("subtitle", JSONObject().put("type", "string"))
+                .put("start", isoTime())
+                .put("stop", isoTime())))
         schemas.put("HistoryEntry", JSONObject().put("type", "object")
             .put("properties", JSONObject()
                 .put("channelId", JSONObject().put("type", "integer").put("format", "int64"))
-                .put("watchedAt", JSONObject().put("type", "integer").put("format", "int64"))))
+                .put("watchedAt", isoTime())))
         schemas.put("OkResponse", JSONObject().put("type", "object")
             .put("properties", JSONObject()
                 .put("ok", JSONObject().put("type", "boolean"))))

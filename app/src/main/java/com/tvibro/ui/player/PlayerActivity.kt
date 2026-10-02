@@ -247,7 +247,31 @@ private var panelTimeout = 0L
             "stop" -> stopPlayback()
             "next" -> stepChannel(1)
             "prev" -> stepChannel(-1)
+            "remote" -> pressRemoteKey(intent.getStringExtra("web_api_key").orEmpty())
         }
+    }
+
+    /**
+     * Presses a remote key the way the remote itself would, so a Web API command runs through the
+     * same handling as the real button: a panel that holds the focus answers first, and otherwise
+     * this window's own key handling deals with it.
+     *
+     * The release matters as much as the press. The centre key picks the channel of the row under
+     * the crosshair on the release, and a side panel answers its own confirm on the release too, so
+     * sending the press alone would either repeat the answer or never produce it.
+     */
+    private fun pressRemoteKey(key: String) {
+        val code = when (key) {
+            "up" -> KeyEvent.KEYCODE_DPAD_UP
+            "down" -> KeyEvent.KEYCODE_DPAD_DOWN
+            "left" -> KeyEvent.KEYCODE_DPAD_LEFT
+            "right" -> KeyEvent.KEYCODE_DPAD_RIGHT
+            "ok" -> KeyEvent.KEYCODE_DPAD_CENTER
+            "back" -> KeyEvent.KEYCODE_BACK
+            else -> return
+        }
+        dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, code))
+        dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_UP, code))
     }
 
     override fun onDestroy() {

@@ -48,6 +48,18 @@ class TvBroApp : Application() {
     val inForeground: Boolean
         get() = synchronized(startedLock) { startedActivities > 0 }
 
+    /**
+     * The window that is on top and holds the focus, or null while the app has none.
+     *
+     * Exactly one activity is resumed at a time, which is what makes this the right answer: the
+     * started windows are only a set, and during a switch from one window to the next both of them
+     * are started for a while, so counting them cannot say which one the user is looking at. The Web
+     * API needs that to hand a remote key to the screen that should act on it.
+     */
+    @Volatile
+    var focusedActivity: Activity? = null
+        private set
+
     override fun onCreate() {
         super.onCreate()
         instance = this
@@ -133,8 +145,12 @@ class TvBroApp : Application() {
         }
 
         override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) = Unit
-        override fun onActivityResumed(activity: Activity) = Unit
-        override fun onActivityPaused(activity: Activity) = Unit
+        override fun onActivityResumed(activity: Activity) {
+            focusedActivity = activity
+        }
+        override fun onActivityPaused(activity: Activity) {
+            if (focusedActivity === activity) focusedActivity = null
+        }
         override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) = Unit
         override fun onActivityDestroyed(activity: Activity) {
             synchronized(startedLock) { pruneLocked(activity) }
