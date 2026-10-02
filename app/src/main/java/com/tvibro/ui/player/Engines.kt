@@ -1157,14 +1157,17 @@ private var aspectMode = 0
             }
 
             val matrix = Matrix()
-            pictureWidth = rectW
-            pictureHeight = rectH
             when (aspectMode) {
                 // Fit screen: keep libVLC letterboxing untouched.
-                0 -> Unit
+                0 -> {
+                    pictureWidth = rectW
+                    pictureHeight = rectH
+                }
                 // Fill screen: stretch the video rect onto the whole view.
                 1 -> {
                     matrix.setScale(viewW / rectW, viewH / rectH)
+                    pictureWidth = viewW
+                    pictureHeight = viewH
                 }
                 // Zoom: scale the video rect up until it covers the view.
                 2 -> {
@@ -1173,6 +1176,8 @@ private var aspectMode = 0
                     val scaledH = rectH * scale
                     matrix.setScale(scale, scale)
                     matrix.postTranslate((viewW - scaledW) / 2f, (viewH - scaledH) / 2f)
+                    pictureWidth = scaledW
+                    pictureHeight = scaledH
                 }
             }
             textureView.setTransform(matrix)
