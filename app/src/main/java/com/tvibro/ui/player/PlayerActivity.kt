@@ -15,6 +15,7 @@ import android.util.TypedValue
 import android.view.KeyEvent
 import android.view.LayoutInflater
 import android.view.MotionEvent
+import android.view.ScaleGestureDetector
 import android.view.View
 import android.view.ViewConfiguration
 import android.view.ViewGroup
@@ -50,6 +51,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.LinkedHashMap
 import kotlin.math.abs
+import kotlin.math.roundToInt
 import java.util.Locale
 import java.util.concurrent.Executors
 
@@ -314,43 +316,182 @@ private var panelTimeout = 0L
         keepPlayingBehind = false
     }
 
+    // ---------------------------------------------------------------- pinch zoom
+    // The picture is scaled as a whole view rather than through the engine, so the same gesture
+    // works for the exo player and for vlc without either of them knowing about it. Only the engine
+    // sits inside the holder, so the scale takes the surface along and leaves the panels above it
+    // alone; what grows past the edge of the screen is clipped by the root, which is the cropping a
+    // zoom is supposed to produce.
+
+    /** Current magnification of the picture. 1 means the whole frame is on screen. */
+    private var zoom = 1f
+
+    /** Where the enlarged picture sits, in pixels of the holder. */
+    private var zoomPanX = 0f
+    private var zoomPanY = 0f
+
+    /** True while a second finger is down, so the one finger gestures keep their hands off. */
+    private var zooming = false
+    private var lastPanX = 0f
+    private var lastPanY = 0f
+
+    private val scaleDetector by lazy {
+        ScaleGestureDetector(this, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
+            override fun onScaleBegin(detector: ScaleGestureDetector): Boolean {
+                // A gesture that had already started as a swipe must not turn into a channel
+                // change halfway through, so it is taken back here.
+                if (touchOnPanel || !::engineHolder.isInitialized) return false
+                zooming = true
+                swipe = SWIPE_NONE
+                touchMoved = true
+                return true
+            }
+
+            override fun onScale(detector: ScaleGestureDetector): Boolean {
+                val before = zoom
+                zoom = (zoom * detector.scaleFactor).coerceIn(MIN_ZOOM, MAX_ZOOM)
+                // The scale happens about the middle of the picture, which would slide whatever
+                // sits between the fingers out from under them, so it is pulled back by exactly
+                // the distance the scale moved it. The detector reports window coordinates.
+                val origin = IntArray(2)
+                engineHolder.getLocationInWindow(origin)
+                zoomPanX += (detector.focusX - origin[0] - engineHolder.width / 2f) * (before - zoom)
+                zoomPanY += (detector.focusY - origin[1] - engineHolder.height / 2f) * (before - zoom)
+                clampZoomPan()
+                applyZoom()
+                return true
+            }
+
+            override fun onScaleEnd(detector: ScaleGestureDetector) {
+                zooming = false
+                // Only the resting value is worth telling about: a scale arrives on every frame.
+                if (zoom > 1f) toast(getString(R.string.zoom_percent, (zoom * 100).roundToInt()))
+            }
+        })
+    }
+
+    private fun applyZoom() {
+        if (!::engineHolder.isInitialized) return
+        engineHolder.pivotX = engineHolder.width / 2f
+        engineHolder.pivotY = engineHolder.height / 2f
+        engineHolder.scaleX = zoom
+        engineHolder.scaleY = zoom
+        engineHolder.translationX = zoomPanX
+        engineHolder.translationY = zoomPanY
+    }
+
+    /**
+     * Size of the picture inside the holder, in holder pixels. An engine letterboxes a frame that
+     * does not match the screen, so this is normally a little smaller than the holder, and those
+     * bars belong to the picture and grow with it. Sizing the pan after the holder instead would let
+     * a drag pull the frame past the edge of the screen and uncover the black holder behind it.
+     */
+    private fun pictureSize(): Pair<Float, Float> {
+        val w = engineHolder.width.toFloat()
+        val h = engineHolder.height.toFloat()
+        val content = if (::engine.isInitialized) engine.contentSize() else null
+        return if (content != null && content.first > 0f && content.second > 0f) content else w to h
+    }
+
+    /**
+     * Keeps the enlarged picture over the screen. The picture may sit at most far enough from the
+     * middle for its own edges to reach the edges of the screen, and while it is not enlarged
+     * enough to cover them there is nowhere to go at all.
+     */
+    private fun clampZoomPan() {
+        if (!::engineHolder.isInitialized || zoom <= MIN_ZOOM) return
+        val (pictureWidth, pictureHeight) = pictureSize()
+        val limitX = maxOf((pictureWidth * zoom - engineHolder.width) / 2f, 0f)
+        val limitY = maxOf((pictureHeight * zoom - engineHolder.height) / 2f, 0f)
+        zoomPanX = zoomPanX.coerceIn(-limitX, limitX)
+        zoomPanY = zoomPanY.coerceIn(-limitY, limitY)
+    }
+
     /**
      * Touch controls, so the player is usable on a tablet where there is no D-pad:
      * a tap on the left edge opens the channel list, a tap anywhere else opens the
      * OSD with the bottom info panel, a vertical swipe changes the channel
-     * (up = next, down = previous). Gestures that start on a visible panel are ignored,
+     * (up = next, down = previous), and a pinch enlarges the picture.
+     * Gestures that start on a visible panel are ignored,
      * so buttons, the channel list and the seek bar keep working, and the remote flow
      * is untouched.
      */
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        // A second finger belongs to the zoom, whatever the one finger state machine below makes
+        // of the very same stream of events.
+        scaleDetector.onTouchEvent(ev)
         when (ev.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 touchDownX = ev.x
                 touchDownY = ev.y
+                lastPanX = ev.x
+                lastPanY = ev.y
                 touchMoved = false
                 touchOnPanel = touchInsidePanel(ev.x, ev.y)
                 swipe = SWIPE_NONE
             }
+            MotionEvent.ACTION_POINTER_DOWN -> {
+                // Whatever the first finger had decided is void the moment a second one arrives,
+                // even if the fingers never spread: releasing them must not read as a tap.
+                zooming = true
+                swipe = SWIPE_NONE
+                touchMoved = true
+            }
+            MotionEvent.ACTION_POINTER_UP -> {
+                // The pinch is over as soon as a finger leaves, so the one that stays can drag
+                // the picture around. Its position is the one to carry on from, not that of the
+                // finger on its way up.
+                val staying = if (ev.actionIndex == 0) 1 else 0
+                zooming = false
+                swipe = SWIPE_NONE
+                lastPanX = ev.getX(staying)
+                lastPanY = ev.getY(staying)
+                touchMoved = true
+            }
             MotionEvent.ACTION_MOVE -> {
-                val dx = ev.x - touchDownX
-                val dy = ev.y - touchDownY
-                if (abs(dx) > tapSlop || abs(dy) > tapSlop) touchMoved = true
-                if (!touchOnPanel && swipe == SWIPE_NONE && abs(dy) > swipeDistance &&
-                    abs(dy) > abs(dx) * SWIPE_VERTICAL_BIAS
-                ) {
-                    swipe = if (dy < 0f) SWIPE_UP else SWIPE_DOWN
+                when {
+                    zooming -> Unit // the scale detector owns this gesture
+                    // A drag over an enlarged picture moves the picture and not the channel: the
+                    // channel would jump the moment the user reaches for a detail off screen.
+                    zoom > 1f && !touchOnPanel && ev.pointerCount == 1 -> {
+                        val dx = ev.x - lastPanX
+                        val dy = ev.y - lastPanY
+                        if (abs(dx) > tapSlop || abs(dy) > tapSlop) touchMoved = true
+                        if (touchMoved) {
+                            zoomPanX += dx
+                            zoomPanY += dy
+                            clampZoomPan()
+                            applyZoom()
+                        }
+                        lastPanX = ev.x
+                        lastPanY = ev.y
+                    }
+                    else -> {
+                        val dx = ev.x - touchDownX
+                        val dy = ev.y - touchDownY
+                        if (abs(dx) > tapSlop || abs(dy) > tapSlop) touchMoved = true
+                        if (!touchOnPanel && swipe == SWIPE_NONE && abs(dy) > swipeDistance &&
+                            abs(dy) > abs(dx) * SWIPE_VERTICAL_BIAS
+                        ) {
+                            swipe = if (dy < 0f) SWIPE_UP else SWIPE_DOWN
+                        }
+                    }
                 }
             }
             MotionEvent.ACTION_UP -> {
-                if (!touchOnPanel) {
+                if (!touchOnPanel && !zooming) {
                     when (swipe) {
                         SWIPE_UP -> if (sideChannelsVisible) hideSideChannels() else nextChannel()
                         SWIPE_DOWN -> if (sideChannelsVisible) hideSideChannels() else previousChannel()
                         else -> if (!touchMoved && !touchInsidePanel(ev.x, ev.y)) handleScreenTap(ev.x)
                     }
                 }
+                zooming = false
             }
-            MotionEvent.ACTION_CANCEL -> swipe = SWIPE_NONE
+            MotionEvent.ACTION_CANCEL -> {
+                swipe = SWIPE_NONE
+                zooming = false
+            }
         }
         return super.dispatchTouchEvent(ev)
     }
@@ -1875,6 +2016,14 @@ captureFontScale(switchAudioCodec) { prefs.bottomPanelFont }
 
         /** Vertical drag must beat the horizontal one by this factor to count as a swipe. */
         const val SWIPE_VERTICAL_BIAS = 1.5f
+
+        /**
+     * How far the picture can be enlarged by a pinch. Below 1 it snaps back instead of shrinking
+     * the frame any further: the source is already as small as it will ever be, so there is
+     * nothing past that for the gesture to reveal.
+     */
+        const val MIN_ZOOM = 1f
+        const val MAX_ZOOM = 4f
 
         const val SWIPE_NONE = 0
         const val SWIPE_UP = 1

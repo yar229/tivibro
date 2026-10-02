@@ -187,6 +187,7 @@
     <string name="aspect_fill">Растянуть</string>
     <string name="aspect_zoom">Увеличить</string>
     <string name="aspect_best_fit">Оптимально</string>
+    <string name="zoom_percent">Масштаб %1$d%%</string>
     <string name="default_source">Источник по умолчанию</string>
     <string name="use_default_source">Использовать источник по умолчанию</string>
     <string name="select_surround_track">По умолчанию выбирать многоканальную дорожку</string>
