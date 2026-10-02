@@ -788,6 +788,12 @@ class SettingsActivity : AppCompatActivity() {
                     EpgSource(name = name, url = url, playlistId = playlistId)
                 )
                 toast(getString(R.string.epg_source_added))
+                // An EPG that was attached just now has never been downloaded, so the guide of
+                // this playlist would sit empty until the next scheduled update. MainActivity
+                // already does this on the same action.
+                TvBroApp.get().sources.refreshEpgForPlaylist(playlistId) { count ->
+                    toast(getString(R.string.epg_updated, count, ""))
+                }
                 rebuild()
             }
         )

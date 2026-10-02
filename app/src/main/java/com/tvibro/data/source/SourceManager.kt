@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import com.tvibro.TvBroApp
 import com.tvibro.data.db.TvBroRepository
 import com.tvibro.data.model.Channel
 import com.tvibro.data.model.ChannelFilter
@@ -30,6 +31,7 @@ data class EpgProgress(
 class SourceManager(context: Context) {
 
     private val repo = TvBroRepository.get(context)
+    private val appContext = context.applicationContext
     private val executor = Executors.newSingleThreadExecutor { r -> Thread(r, "tvibro-update").apply { isDaemon = true } }
     private val running = AtomicBoolean(false)
     private val main = Handler(Looper.getMainLooper())
@@ -79,7 +81,11 @@ class SourceManager(context: Context) {
                 val now = System.currentTimeMillis()
                 val stored = repo.replaceChannels(playlistId, fresh)
                 repo.setPlaylistLastUpdate(playlistId, now)
-                val programs = loadEpgFor(playlist, stored)
+                val programs = if (epgOnChange()) {
+                    loadEpgFor(playlist, stored)
+                } else {
+                    emptyMap<Long, List<Program>>()
+                }
                 programs.size to stored.size
             }
             running.set(false)
@@ -100,7 +106,7 @@ class SourceManager(context: Context) {
                         val now = System.currentTimeMillis()
                         val stored = repo.replaceChannels(playlist.id, fresh)
                         repo.setPlaylistLastUpdate(playlist.id, now)
-                        loadEpgFor(playlist, stored)
+                        if (epgOnChange()) loadEpgFor(playlist, stored)
                     }
                 } catch (e: Exception) {
                     errors++
@@ -195,6 +201,36 @@ class SourceManager(context: Context) {
     }
 
     fun refreshEpgForPlaylist(playlistId: Long, onDone: (Int) -> Unit) {
+        fetchEpgForPlaylist(playlistId, onDone)
+    }
+
+    /**
+     * The EPG for a playlist that has just been written. Its channels are already in the database,
+     * so only the programmes have to be pulled for them.
+     *
+     * Without this a brand new playlist sits in the guide with every channel empty until the next
+     * scheduled EPG update, which is hours away: the wizard that created the playlist is exactly
+     * the moment where its EPG is known and has never been downloaded.
+     */
+    fun refreshEpgOnChange(playlistId: Long, onDone: ((Int) -> Unit)? = null) {
+        if (!epgOnChange()) {
+            if (onDone != null) onMain { onDone(0) }
+            return
+        }
+        fetchEpgForPlaylist(playlistId) { count -> onDone?.invoke(count) }
+    }
+
+    /**
+     * Whether a change to the playlists should bring the EPG along with it.
+     *
+     * A refreshed playlist can come back with channels no programme has ever been matched to, so
+     * the two updates normally belong together. A user who keeps them apart - to save the traffic of
+     * a large xmltv archive, or to update the EPG on their own schedule - turns this off, and the
+     * scheduled and manual EPG updates still work.
+     */
+    private fun epgOnChange(): Boolean = TvBroApp.prefs(appContext).updateOnChange
+
+    private fun fetchEpgForPlaylist(playlistId: Long, onDone: (Int) -> Unit) {
         executor.execute {
             running.set(true)
             val playlist = repo.playlist(playlistId)
