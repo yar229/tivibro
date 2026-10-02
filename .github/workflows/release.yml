@@ -62,7 +62,6 @@ jobs:
           org.gradle.caching=true
           android.useAndroidX=true
           android.nonTransitiveRClass=true
-          android.defaults.buildfeatures.buildconfig=true
           kotlin.code.style=official
           EOF
           echo "Wrote gradle.properties:"
