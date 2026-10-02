@@ -83,17 +83,24 @@ class ExoEngine(
     bufferMs: Int = 5000,
     tunneled: Boolean = false,
     passthrough: Boolean = false,
+    softwareAudio: Boolean = false,
 ) : PlaybackEngine {
 
     private val appContext = context.applicationContext
     private val trackSelector = DefaultTrackSelector(appContext)
-    // PREFER puts the FFmpeg extension ahead of MediaCodec: Stalker portals hand out MPEG audio
-    // layer 2 streams that no platform decoder on these boxes can handle, and FFmpeg is the only
-    // way they produce sound instead of a hard "track not supported" failure.
+    // MediaCodec is the hardware audio decoder and FFmpeg is the software one, so the setting only
+    // decides which of the two is tried first and neither mode switches the other off: Stalker
+    // portals hand out MPEG audio layer 2 streams that no platform decoder on these boxes can
+    // handle, and FFmpeg is the only way they produce sound instead of a hard "track not supported"
+    // failure. The ffmpeg module in this project carries audio renderers only, so none of this
+    // says anything about which video decoder is picked.
     private val renderersFactory =
         DefaultRenderersFactory(appContext)
             .setEnableDecoderFallback(true)
-            .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
+            .setExtensionRendererMode(
+                if (softwareAudio) DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER
+                else DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON
+            )
     private val loadControl = buildLoadControl(bufferMs)
     private val player: ExoPlayer = ExoPlayer.Builder(appContext)
         .setRenderersFactory(renderersFactory)
