@@ -385,6 +385,10 @@ class PlaylistWizardActivity : AppCompatActivity() {
                 if (channels.isEmpty()) error(getString(R.string.playlist_update_failed))
                 repo.replaceChannels(playlistId, channels)
                 repo.setPlaylistLastUpdate(playlistId, System.currentTimeMillis())
+                // The EPG is bound a few lines above, so this is the one moment where its url is
+                // known and has never been downloaded. It runs on the update thread, so the
+                // wizard does not have to wait for it.
+                TvBroApp.get().sources.refreshEpgOnChange(playlistId)
                 channels.size
             }
             runOnUiThread {
