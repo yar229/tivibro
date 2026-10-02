@@ -32,6 +32,7 @@ import coil.load
 import com.tvibro.R
 import com.tvibro.TvBroApp
 import com.tvibro.base.Fmt
+import com.tvibro.base.applyPanelTransparency
 import com.tvibro.base.pxPerSp
 import com.tvibro.base.startActivitySafely
 import com.tvibro.base.toast
@@ -403,6 +404,8 @@ private var panelTimeout = 0L
         if (::engine.isInitialized && !hidden) engine.play()
         // font scales can change while Settings is open on top of the player
         if (::sideChannelAdapter.isInitialized) applyPanelFontScales()
+        // so can the panel transparency
+        if (::switchPanel.isInitialized) applyPanelTransparency()
         // a foreground service would need a type on API 34+, a window flag is enough
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
     }
@@ -495,6 +498,7 @@ captureFontScale(switchAudioCodec) { prefs.bottomPanelFont }
         captureFontScale(sideScheduleEmpty) { prefs.infoPanelFont }
 
         applyPanelFontScales()
+        applyPanelTransparency()
     }
 
     /** Base sp sizes captured once, so re-applying a scale never compounds. */
@@ -512,6 +516,17 @@ captureFontScale(switchAudioCodec) { prefs.bottomPanelFont }
         }
         sideChannelAdapter.setFontScale(prefs.channelPanelFont)
         sideScheduleAdapter.setFontScale(prefs.infoPanelFont)
+    }
+
+    /**
+     * The four surfaces the picture is covered by. Only their backgrounds are dimmed, so the text
+     * and the rows stay fully legible on top of whatever the video shows through.
+     */
+    private fun applyPanelTransparency() {
+        sideChannelsList.applyPanelTransparency(this)
+        findViewById<View>(R.id.side_program_details).applyPanelTransparency(this)
+        switchPanel.applyPanelTransparency(this)
+        infoPanel.applyPanelTransparency(this)
     }
 
     private fun buildPanelButtons() {
