@@ -211,12 +211,43 @@ private var panelTimeout = 0L
         buildPanelButtons()
         startTicker()
 
-        val channelId = intent.getLongExtra(EXTRA_CHANNEL_ID, 0L)
-        if (channelId == 0L) {
+        // A command from the Web API carries the channel under its own extra name. Without this the
+        // player built from such a command found no channel, closed again straight away, and the
+        // command only ever worked while a player happened to be running already.
+        val channelId = intent.getLongExtra(EXTRA_CHANNEL_ID, 0L).takeIf { it > 0L }
+            ?: intent.getLongExtra("web_api_channel_id", 0L).takeIf { it > 0L }
+        if (channelId == null) {
+            // Nothing named a channel, so there is nothing to play: a command like stop or next has
+            // no player of its own to act on, and a plain launch without a channel has no stream.
             finish()
             return
         }
         loadChannel(channelId, fromStart = true)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        // This window is singleTask, so a Web API command sent while the player is already on top
+        // arrives here instead of building a second player. Switching the channel in place is what
+        // makes that safe: a fresh window would tear the engine down on its way out and the two
+        // teardowns would race each other over the shared playback state.
+        setIntent(intent)
+        val action = intent.getStringExtra("web_api_action") ?: return
+        when (action) {
+            "play" -> {
+                val id = intent.getLongExtra("web_api_channel_id", 0L)
+                if (id > 0L) {
+                    channelIds.takeIf { it.isNotEmpty() }?.let { ids ->
+                        val index = ids.indexOfFirst { it == id }
+                        if (index >= 0) currentIndex = index
+                    }
+                    switchToChannel(id)
+                }
+            }
+            "stop" -> stopPlayback()
+            "next" -> stepChannel(1)
+            "prev" -> stepChannel(-1)
+        }
     }
 
     override fun onDestroy() {

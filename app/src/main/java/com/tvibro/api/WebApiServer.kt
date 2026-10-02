@@ -6,6 +6,7 @@ import com.tvibro.TvBroApp
 import com.tvibro.data.model.ChannelFilter
 import com.tvibro.ui.main.MainActivity
 import com.tvibro.ui.player.Playback
+import com.tvibro.ui.player.PlayerActivity
 import org.json.JSONArray
 import org.json.JSONObject
 import java.net.NetworkInterface
@@ -61,8 +62,8 @@ class WebApiServer(
             "/api/prev" -> prev()
             "/api/remote" -> remote(session)
             "/api/openapi.json" -> openApi(session)
-            "/api/docs" -> swaggerUi(session)
-            "/swagger" -> swaggerUi(session)
+            "/api/docs" -> swaggerUi()
+            "/swagger" -> swaggerUi()
             else -> jsonError(Response.Status.NOT_FOUND, "not found")
         }
     }
@@ -72,7 +73,6 @@ class WebApiServer(
         obj.put("playing", Playback.active())
         obj.put("channelId", Playback.channelId())
         obj.put("channelName", Playback.channelName())
-        obj.put("positionMs", Playback.positionMs())
         return jsonOk(obj)
     }
 
@@ -147,17 +147,14 @@ class WebApiServer(
     }
 
     private fun sendToMain(action: String, channelId: Long = -1L, key: String = "") {
-        val intent = Intent(app, MainActivity::class.java)
-            // CLEAR_TOP is what makes the command arrive at all. With SINGLE_TOP alone the intent
-            // only lands on the guide while the guide is the top window, so a command sent while the
-            // full screen player is up built a second guide underneath it instead, and the handler
-            // behind onNewIntent never ran. Clearing the top brings the one guide forward and hands it
-            // the command.
-            .addFlags(
-                Intent.FLAG_ACTIVITY_NEW_TASK or
-                    Intent.FLAG_ACTIVITY_CLEAR_TOP or
-                    Intent.FLAG_ACTIVITY_SINGLE_TOP
-            )
+        // Commands that change what is on screen go to the player, which is singleTask: while it is
+        // already up the command lands in its onNewIntent and the channel is switched in place.
+        // Sending those to the guide instead meant clearing the player off the top of the stack, and
+        // the player it destroyed released the shared engine afterwards, wiping the channel the
+        // freshly started one had just put there. The player never opens without a channel to play.
+        val toPlayer = action == "play" || action == "stop" || action == "next" || action == "prev"
+        val intent = Intent(app, if (toPlayer) PlayerActivity::class.java else MainActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
             .putExtra("web_api_action", action)
         if (channelId > 0) intent.putExtra("web_api_channel_id", channelId)
         if (key.isNotEmpty()) intent.putExtra("web_api_key", key)
@@ -178,7 +175,6 @@ class WebApiServer(
             .put("playing", true)
             .put("channelId", 42)
             .put("channelName", "BBC One")
-            .put("positionMs", 125000)
         val statusContent = JSONObject().put("application/json", JSONObject()
             .put("schema", statusSchema)
             .put("example", statusExample))
@@ -327,8 +323,7 @@ class WebApiServer(
             .put("properties", JSONObject()
                 .put("playing", JSONObject().put("type", "boolean"))
                 .put("channelId", JSONObject().put("type", "integer").put("format", "int64"))
-                .put("channelName", JSONObject().put("type", "string"))
-                .put("positionMs", JSONObject().put("type", "integer").put("format", "int64"))))
+                .put("channelName", JSONObject().put("type", "string"))))
         schemas.put("Channel", JSONObject().put("type", "object")
             .put("properties", JSONObject()
                 .put("id", JSONObject().put("type", "integer").put("format", "int64"))
@@ -369,7 +364,7 @@ class WebApiServer(
         return jsonOk(spec)
     }
 
-    private fun swaggerUi(session: IHTTPSession): Response {
+    private fun swaggerUi(): Response {
         val html = """
             <!DOCTYPE html>
             <html>
