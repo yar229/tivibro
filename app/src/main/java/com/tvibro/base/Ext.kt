@@ -11,6 +11,10 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.core.view.updateLayoutParams
 import java.text.SimpleDateFormat
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.time.temporal.ChronoUnit
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
@@ -34,6 +38,22 @@ object Fmt {
     /** Day number and month, e.g. "12 Oct" / "12 окт": the second line of the scale day. */
     fun dayDate(timeMs: Long, locale: Locale): String =
         SimpleDateFormat("d MMM", locale).format(Date(timeMs))
+
+    /**
+     * ISO 8601 in the zone this device is on, e.g. "2026-10-02T11:00:00+03:00". The Web API hands its
+     * times out in this shape, so a caller can place a programme in a calendar without first having
+     * to work out which zone the player sits in. DateTimeFormatter is immutable, which matters here:
+     * these answers are built on the server's worker threads rather than on one UI thread.
+     *
+     * The fraction is cut off. A programme time lands on a whole second while a watched-at time
+     * carries milliseconds, and printing both as they come would make the same field look like two
+     * different shapes to whoever parses it.
+     */
+    fun isoTime(timeMs: Long): String =
+        Instant.ofEpochMilli(timeMs)
+            .truncatedTo(ChronoUnit.SECONDS)
+            .atZone(ZoneId.systemDefault())
+            .format(DateTimeFormatter.ISO_OFFSET_DATE_TIME)
 
     fun relativeDay(timeMs: Long, locale: Locale): String {
         val today = startOfDay(System.currentTimeMillis())
