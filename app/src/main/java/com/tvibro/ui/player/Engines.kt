@@ -55,7 +55,14 @@ interface PlaybackEngine {
     fun aspectMode(): Int
     fun cyclesAspectMode()
     fun aspectModeLabel(context: Context): String
-    fun videoSize(): Pair<Int, Int>?
+fun videoSize(): Pair<Int, Int>?
+      /**
+       * Size of the picture as it is actually drawn, in the surface view's own pixels. An engine
+       * letterboxes a frame that does not match the screen, so this is normally smaller than the
+       * view: a gesture that drags the picture has to stop at these edges rather than at the edges
+       * of the view, or the frame would slide off the screen and uncover what is behind it.
+       */
+      fun contentSize(): Pair<Float, Float>? = null
     fun videoFps(): Float?
     fun audioChannels(): Int?
     fun videoCodecLabel(): String? = null
@@ -394,6 +401,15 @@ class ExoEngine(
         if (width <= 0 || height <= 0) null else width to height
     }.getOrNull()
 
+    override fun contentSize(): Pair<Float, Float>? {
+        // The aspect frame measures the surface to the shape of the frame, so the surface is the
+        // picture and the view around it is the letterboxing.
+        val surface = playerView.videoSurfaceView ?: return null
+        return if (surface.width > 0 && surface.height > 0)
+            surface.width.toFloat() to surface.height.toFloat()
+        else null
+    }
+
     override fun videoFps(): Float? {
         spsInfo?.frameRate?.let { if (it > 0) return it }
         return runCatching { player.videoFormat?.frameRate?.takeIf { it > 0 } }.getOrNull()
@@ -423,10 +439,17 @@ class VlcEngine(context: Context, private val parent: ViewGroup) : PlaybackEngin
     private val libVLC: LibVLC = LibVLC(context, arrayListOf("--no-video-title-show"))
     private val textureView = TextureView(context)
     private val mediaPlayer: MediaPlayer = MediaPlayer(libVLC)
-    private var aspectMode = 0
-    private var surfaceReady = false
-    private var pending: Triple<String, String, Long>? = null
-    private var lastLayout: VideoLayout? = null
+private var aspectMode = 0
+      private var surfaceReady = false
+      private var pending: Triple<String, String, Long>? = null
+      private var lastLayout: VideoLayout? = null
+
+      // Kept from [applyAspectMode] so a gesture can ask how big the picture really is.
+      private var pictureWidth = 0f
+      private var pictureHeight = 0f
+
+      override fun contentSize(): Pair<Float, Float>? =
+          if (pictureWidth > 0f && pictureHeight > 0f) pictureWidth to pictureHeight else null
 
     override val surfaceView: View get() = textureView
 
@@ -1134,6 +1157,8 @@ class VlcEngine(context: Context, private val parent: ViewGroup) : PlaybackEngin
             }
 
             val matrix = Matrix()
+            pictureWidth = rectW
+            pictureHeight = rectH
             when (aspectMode) {
                 // Fit screen: keep libVLC letterboxing untouched.
                 0 -> Unit

@@ -200,6 +200,7 @@
     <string name="aspect_fill">Fill screen</string>
     <string name="aspect_zoom">Zoom</string>
     <string name="aspect_best_fit">Best fit</string>
+    <string name="zoom_percent">Zoom %1$d%%</string>
     <string name="default_source">Default source</string>
     <string name="use_default_source">Use default source</string>
     <string name="select_surround_track">Select surround audio track by default</string>
