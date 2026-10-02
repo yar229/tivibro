@@ -364,7 +364,7 @@ class Prefs private constructor(context: Context) {
         set(v) = sp.edit { putString(KEY_REMOTE_DOWN, v) }
 
     var switchDescriptionMaxLines: Int
-        get() = sp.getInt(KEY_SWITCH_DESC_LINES, 3).coerceIn(1, 10)
+        get() = sp.getInt(KEY_SWITCH_DESC_LINES, 9).coerceIn(1, 10)
         set(v) = sp.edit { putInt(KEY_SWITCH_DESC_LINES, v.coerceIn(1, 10)) }
 
     var confirmExit: Boolean
