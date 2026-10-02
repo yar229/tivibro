@@ -1,8 +1,10 @@
 package com.tvibro.ui.main
 
+import android.Manifest
 import android.animation.ValueAnimator
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.media.AudioFocusRequest
 import android.media.AudioManager
 import android.media.AudioAttributes as AndroidAudioAttributes
@@ -25,7 +27,9 @@ import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.activity.OnBackPressedCallback
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import androidx.core.view.doOnPreDraw
 import androidx.core.view.updateLayoutParams
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -163,6 +167,27 @@ class MainActivity : AppCompatActivity() {
     private var tapDownX = 0f
     private var tapDownY = 0f
 
+    private val notificationPermission =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) {
+            // A refusal changes nothing else: the guide keeps working and the notice simply stays
+            // hidden until notifications are allowed in the system settings.
+        }
+
+    /**
+     * From Android 13 on, every notification from an app that never asks for this permission is
+     * dropped without a word, and the only notice this app posts ("the guide has been updated")
+     * comes from a worker that outlives this activity, so nothing would ever explain the silence.
+     * Android stops offering the dialog by itself once the user has refused twice, so no flag of
+     * our own is needed to stop it from reappearing.
+     */
+    private fun askForNotificationPermission() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+        val granted = ContextCompat.checkSelfPermission(
+            this, Manifest.permission.POST_NOTIFICATIONS
+        ) == PackageManager.PERMISSION_GRANTED
+        if (!granted) notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         prefs = Prefs.get(this)
@@ -174,6 +199,7 @@ class MainActivity : AppCompatActivity() {
         buildMenuStrip()
         startClock()
         setupBackHandling()
+        askForNotificationPermission()
 
         // A touch screen has no Left key, so every visible column carries the button that opens the
         // next hidden one. The buttons stay out of the focus chain, the remote goes on using its keys.
