@@ -28,6 +28,7 @@ object PlaybackEngineFactory {
             TvBroApp.get(), holder,
             bufferMs = prefs.bufferSizeMs,
             tunneled = prefs.tunneledPlayback,
+            softwareAudio = prefs.audioDecoder == "software",
         )
         exo.setPassthrough(prefs.audioPassthrough)
         exo.setHardwareDecoder(prefs.videoDecoder != "software")
