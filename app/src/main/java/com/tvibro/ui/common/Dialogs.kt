@@ -13,6 +13,7 @@ import android.widget.TextView
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.tvibro.R
+import com.tvibro.base.applyPanelTransparency
 import com.tvibro.base.visible
 
 object Dialogs {
@@ -144,6 +145,9 @@ object Dialogs {
 
     fun baseDialog(context: Context, view: View): Dialog {
         val dialog = Dialog(context, R.style.Theme_TvBro_Dialog)
+        // Every dialog in the app is built from one of the layouts that carry the panel background,
+        // so this single call covers all of them.
+        view.applyPanelTransparency(context)
         dialog.setContentView(view)
         dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
         dialog.window?.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
