@@ -125,6 +125,9 @@ class MainActivity : AppCompatActivity() {
     private var loadingMoreDays = false
     private var leftStage = STAGE_CONTENT
     private var answeredConfirm = 0L
+
+    /** When the current press of the back key went down, to tell a hold from a tap. */
+    private var backDownAt = 0L
     private var pendingFocus = true
     /** Crosshair target that still has to be reached, kept until the cell really holds the focus. */
     private var focusTargetChannel = RecyclerView.NO_POSITION
@@ -2020,6 +2023,9 @@ class MainActivity : AppCompatActivity() {
      * the remote gets a single press.
      */
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        // Ahead of the confirm key below, so the back press is always measured, whatever else the
+        // event turns out to be.
+        if (handleLongBack(event)) return true
         if (isConfirmKey(event)) {
             if (event.action == KeyEvent.ACTION_UP) {
                 // The release of a press that was answered already must not reach the row: the row
@@ -2034,6 +2040,67 @@ class MainActivity : AppCompatActivity() {
             }
         }
         return super.dispatchKeyEvent(event)
+    }
+
+    /**
+     * A hold of the back key means "back to the player".
+     *
+     * The back key is the one key a remote presses most and the one whose meaning changes with what
+     * is on screen, so a plain press has to stay whatever the dispatcher makes of it. Only a hold is
+     * claimed here, and it is measured on the release: `onBackPressed` cannot tell the two apart,
+     * because by the time it runs the press is already over. The release of a hold is swallowed, or
+     * the same press would close the column or leave the app on top of opening the player.
+     */
+    private fun handleLongBack(event: KeyEvent): Boolean {
+        if (event.keyCode != KeyEvent.KEYCODE_BACK) {
+            backDownAt = 0L
+            return false
+        }
+        when (event.action) {
+            KeyEvent.ACTION_DOWN -> if (event.repeatCount == 0) backDownAt = event.downTime
+            KeyEvent.ACTION_UP -> {
+                val downAt = backDownAt
+                backDownAt = 0L
+                if (!prefs.longBackToPlayer || downAt == 0L) return false
+                if (event.eventTime - downAt < ViewConfiguration.getLongPressTimeout()) return false
+                return returnToPlayer()
+            }
+        }
+        return false
+    }
+
+    /**
+     * Puts the player back in front of the user.
+     *
+     * A stream running in the strip of the guide is the player already, so it is expanded instead of
+     * being asked for again; otherwise the channel that was watched last is opened, and its list of
+     * siblings rides along so the keys keep walking the channels. With nothing to go back to the
+     * press is not answered here and the dispatcher treats it as an ordinary back.
+     */
+    private fun returnToPlayer(): Boolean {
+        if (Playback.active() && Playback.channelId() > 0L) {
+            expandMiniPlayer()
+            return true
+        }
+        val lastId = runCatching { repo.lastWatchedChannelId() }.getOrNull()?.takeIf { it > 0L }
+            ?: return false
+        if (prefs.pin.isNotEmpty() && prefs.pinRequiredFor == "always") {
+            PinActivity.start(this, lastId)
+            return true
+        }
+        firstResume = false
+        playerLaunched = true
+        val index = currentChannels.indexOfFirst { it.id == lastId }
+        if (index >= 0) {
+            play(currentChannels[index], currentChannels, stayInGuide = false)
+        } else {
+            // The channel belongs to another category, so the list on screen cannot describe it.
+            startActivity(
+                Intent(this, PlayerActivity::class.java)
+                    .putExtra(PlayerActivity.EXTRA_CHANNEL_ID, lastId)
+            )
+        }
+        return true
     }
 
     private fun isConfirmKey(event: KeyEvent): Boolean {
