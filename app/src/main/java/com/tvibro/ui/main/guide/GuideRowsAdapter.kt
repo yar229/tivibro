@@ -272,10 +272,10 @@ class GuideRowsAdapter(
      *
      * A channel the EPG says nothing about used to be an empty row, and every helper here skips such
      * a row: the vertical step looked for the next channel with a cell and stepped over it, so the
-     * remote could not land on such a channel at all. The stand-in is a run of empty cells over the
-     * whole axis, which is the same thing the row would look like if the channel did have a schedule
-     * of blank entries - the remote walks it like any other row, and the info panel has something
-     * to say about the time it covers.
+     * remote could not land on such a channel at all. The stand-in is a run of empty cells over what
+     * is still ahead, which is the same thing the row would look like if the channel did have a
+     * schedule of blank entries - the remote walks it like any other row, and the info panel has
+     * something to say about the time it covers. Nothing is stood in for a time that has gone by.
      *
      * The list is built once per axis and then reused, so a rebuild of the rows compares the same
      * instance and the cell under the crosshair survives it.
@@ -284,7 +284,8 @@ class GuideRowsAdapter(
         val channel = channels.getOrNull(channelPosition) ?: return emptyList()
         val stored = programs[channel.id].orEmpty()
         val end = gridStart + loadedDays * DAY_MS
-        val visible = visiblePrograms(stored, showPast, System.currentTimeMillis())
+        val now = System.currentTimeMillis()
+        val visible = visiblePrograms(stored, showPast, now)
         val onAxis = visible.any {
             it.stop > gridStart && it.start < end &&
                 pixelForTime(it.stop) > 0 && pixelForTime(it.start) < gridWidth
@@ -294,15 +295,37 @@ class GuideRowsAdapter(
         // schedule: the channel does have a guide, the user has asked not to see this part of it,
         // and a made-up row of placeholders would read as a channel with no EPG at all.
         if (stored.isNotEmpty() && visible.isEmpty()) return emptyList()
-        placeholders[channel.id]?.let { return it }
+        val stand = placeholders[channel.id] ?: buildPlaceholders(channel.id, end, now)
+        // What has already gone by is never invented. The stand-in run starts at the clock, but the
+        // clock keeps moving while the grid is built and stays on screen, so the blocks that have
+        // run out since are dropped on the way out - a channel without a guide stays empty behind
+        // the clock instead of filling the past with programmes that were never on.
+        var from = 0
+        while (from < stand.size && stand[from].stop <= now) from++
+        return if (from == 0) stand else stand.subList(from, stand.size)
+    }
+
+    /**
+     * Stand-in schedule for a channel the EPG says nothing about, starting at the first whole block
+     * boundary on or after [now].
+     *
+     * It used to start at [gridStart] and walk the whole axis, which filled the part of the day that
+     * has already happened with programmes that do not exist, and the grid happily marked one of
+     * them as being on air. The run now begins at the next boundary instead, so nothing before the
+     * clock is invented, and every empty row agrees on where it starts and still lands on the hour
+     * lines of the axis.
+     */
+    private fun buildPlaceholders(channelId: Long, end: Long, now: Long): List<Program> {
+        val elapsed = (now - gridStart).coerceAtLeast(0L)
+        var cursor = gridStart + elapsed / PLACEHOLDER_MS * PLACEHOLDER_MS
+        if (cursor < now) cursor += PLACEHOLDER_MS
         val built = ArrayList<Program>(loadedDays * HOURS_IN_DAY / PLACEHOLDER_HOURS)
-        var cursor = gridStart
         while (cursor < end) {
             val stop = (cursor + PLACEHOLDER_MS).coerceAtMost(end)
-            built += Program(channelId = channel.id, start = cursor, stop = stop)
+            built += Program(channelId = channelId, start = cursor, stop = stop)
             cursor = stop
         }
-        placeholders[channel.id] = built
+        placeholders[channelId] = built
         return built
     }
 
