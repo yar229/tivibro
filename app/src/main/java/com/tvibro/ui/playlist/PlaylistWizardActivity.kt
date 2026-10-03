@@ -4,25 +4,29 @@ import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
 import android.text.InputType
+import android.text.TextUtils
+import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.view.updateLayoutParams
 import androidx.core.widget.TextViewCompat
 import com.tvibro.R
 import com.tvibro.TvBroApp
+import com.tvibro.base.applyFocusScale
 import com.tvibro.base.toast
 import com.tvibro.base.visible
 import com.tvibro.data.db.TvBroRepository
 import com.tvibro.data.model.EpgSource
 import com.tvibro.data.model.Playlist
 import com.tvibro.data.model.PlaylistType
-import com.tvibro.data.source.Http
+import com.tvibro.data.source.LocalFile
 import com.tvibro.data.source.M3uParser
 import com.tvibro.data.source.StalkerApi
 import com.tvibro.data.source.XtreamApi
@@ -49,6 +53,25 @@ class PlaylistWizardActivity : AppCompatActivity() {
     private var type: PlaylistType = PlaylistType.REMOTE_M3U
     private var onTypeStep = true
     private val inputs = HashMap<Int, EditText>()
+
+    /** Reference of the picked playlist file, kept apart from the fields: it is not typed. */
+    private var playlistFile = ""
+    private var playlistFileView: TextView? = null
+
+    /**
+     * Asks the system for the playlist file.
+     *
+     * The grant that comes with the answer dies with the process, and a playlist is read again on
+     * every update, so it is asked to outlive that. Not every provider agrees to that, and the user
+     * is better off knowing that the file will have to be picked again than finding out on the day
+     * the playlist stops updating.
+     */
+    private val pickPlaylistFile = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri == null) return@registerForActivityResult
+        playlistFile = uri.toString()
+        if (!LocalFile.keepPermission(this, uri)) toast(getString(R.string.file_access_not_kept))
+        showChosenFile()
+    }
 
     /** Playlist being edited, null while a new one is being added. */
     private var editing: Playlist? = null
@@ -118,6 +141,7 @@ class PlaylistWizardActivity : AppCompatActivity() {
                 }
                 editing = playlist
                 type = playlist.type
+                if (type == PlaylistType.FILE) playlistFile = playlist.url
                 draft = Draft(
                     name = playlist.name,
                     url = playlist.url,
@@ -144,13 +168,10 @@ class PlaylistWizardActivity : AppCompatActivity() {
             Dialogs.Item(getString(R.string.m3u_playlist)),
             Dialogs.Item(getString(R.string.xtream_codes)),
             Dialogs.Item(getString(R.string.stalker_portal)),
+            Dialogs.Item(getString(R.string.local_file)),
         )
         Dialogs.show(this, getString(R.string.playlist_type), getString(R.string.select_playlist_type), items) { which ->
-            type = listOf(
-                PlaylistType.REMOTE_M3U,
-                PlaylistType.XTREAM,
-                PlaylistType.STALKER,
-            )[which.coerceIn(0, 2)]
+            type = typeOrder[which.coerceIn(0, typeOrder.lastIndex)]
             showDetailsStep()
         }
     }
@@ -161,7 +182,13 @@ class PlaylistWizardActivity : AppCompatActivity() {
         if (inputs.isNotEmpty()) captureDraft()
         clearFields()
         when (type) {
-            PlaylistType.FILE -> Unit
+            PlaylistType.FILE -> {
+                titleView.setText(if (editing != null) R.string.edit_playlist else R.string.local_file_parameters)
+                addField(R.string.playlist_name, InputType.TYPE_CLASS_TEXT, draft.name.ifBlank { defaultName() })
+                addFileRow()
+                addField(R.string.epg_url, InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI, draft.epg, optional = true)
+                messageView.setText(R.string.local_file_hint)
+            }
             PlaylistType.REMOTE_M3U -> {
                 titleView.setText(if (editing != null) R.string.edit_playlist else R.string.m3u_parameters)
                 addField(R.string.playlist_name, InputType.TYPE_CLASS_TEXT, draft.name.ifBlank { defaultName() })
@@ -239,13 +266,10 @@ class PlaylistWizardActivity : AppCompatActivity() {
             Dialogs.Item(getString(R.string.m3u_playlist), checked = type == PlaylistType.REMOTE_M3U),
             Dialogs.Item(getString(R.string.xtream_codes), checked = type == PlaylistType.XTREAM),
             Dialogs.Item(getString(R.string.stalker_portal), checked = type == PlaylistType.STALKER),
+            Dialogs.Item(getString(R.string.local_file), checked = type == PlaylistType.FILE),
         )
         Dialogs.show(this, getString(R.string.playlist_type), getString(R.string.select_playlist_type), items) { which ->
-            type = listOf(
-                PlaylistType.REMOTE_M3U,
-                PlaylistType.XTREAM,
-                PlaylistType.STALKER,
-            )[which.coerceIn(0, 2)]
+            type = typeOrder[which.coerceIn(0, typeOrder.lastIndex)]
             showDetailsStep()
         }
     }
@@ -269,9 +293,66 @@ class PlaylistWizardActivity : AppCompatActivity() {
         inputs[labelRes] = edit
     }
 
+    /**
+     * The row that holds the picked playlist file.
+     *
+     * It shows the name the file has on the device and keeps the reference to itself: a
+     * `content://` reference says nothing to a person and there is no field to type one into. The
+     * name is all that is written down, the whole reference stays where the picker left it.
+     */
+    private fun addFileRow() {
+        val ctx = this
+        val label = TextView(this).apply {
+            setText(getString(R.string.playlist_file))
+            TextViewCompat.setTextAppearance(this, R.style.TvBro_Text_Time)
+            setTextColor(ContextCompat.getColor(ctx, R.color.text_secondary))
+        }
+        val value = TextView(ctx).apply {
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+                .apply { marginStart = ctx.resources.getDimensionPixelSize(R.dimen.spacing_md) }
+            TextViewCompat.setTextAppearance(this, R.style.TvBro_Text_Time)
+            maxLines = 1
+            ellipsize = TextUtils.TruncateAt.END
+            setTextColor(ContextCompat.getColor(ctx, R.color.text_secondary))
+        }
+        playlistFileView = value
+        val row = LinearLayout(ctx).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            addView(value)
+            addView(TextView(ctx).apply {
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                ).apply { marginStart = ctx.resources.getDimensionPixelSize(R.dimen.spacing_md) }
+                TextViewCompat.setTextAppearance(this, R.style.TvBro_NavItemLabel)
+                setBackgroundResource(R.drawable.bg_group_item)
+                applyFocusScale()
+                setOnClickListener { pickPlaylistFile.launch(ANY_FILE) }
+                setText(R.string.choose_file)
+            })
+        }
+        fieldsView.addView(label)
+        fieldsView.addView(row)
+        showChosenFile()
+    }
+
+    /** Writes the picked file, or the absence of one, into the row. */
+    private fun showChosenFile() {
+        val view = playlistFileView ?: return
+        val picked = playlistFile.isNotBlank()
+        view.setText(
+            if (picked) LocalFile.displayName(this, playlistFile) else getString(R.string.no_file_selected)
+        )
+        view.setTextColor(
+            ContextCompat.getColor(this, if (picked) R.color.text_primary else R.color.text_secondary)
+        )
+    }
+
     private fun clearFields() {
         fieldsView.removeAllViews()
         inputs.clear()
+        playlistFileView = null
         statusView.visible(false)
         statusView.text = ""
     }
@@ -281,6 +362,7 @@ class PlaylistWizardActivity : AppCompatActivity() {
             name = value(R.string.playlist_name),
             url = when (type) {
                 PlaylistType.REMOTE_M3U -> value(R.string.playlist_url)
+                PlaylistType.FILE -> playlistFile
                 else -> value(R.string.server_address)
             },
             login = value(R.string.username),
@@ -297,8 +379,9 @@ class PlaylistWizardActivity : AppCompatActivity() {
     private fun server(): String = value(R.string.server_address).trimEnd('/')
 
     private fun testConnection() {
-        if (serverOrUrl().isBlank()) {
-            toast(getString(R.string.url_required))
+        val target = serverOrUrl()
+        if (target.isBlank()) {
+            toast(getString(if (type == PlaylistType.FILE) R.string.playlist_file_required else R.string.url_required))
             return
         }
         statusView.visible(true)
@@ -315,8 +398,12 @@ class PlaylistWizardActivity : AppCompatActivity() {
                         val api = StalkerApi(server(), value(R.string.mac_address).ifBlank { null })
                         if (api.login()) getString(R.string.connection_successful) else getString(R.string.connection_failed)
                     }
+                    PlaylistType.FILE -> {
+                        val parsed = M3uParser.parse(LocalFile.open(this, target), null)
+                        getString(R.string.channels_found, parsed.channels.size)
+                    }
                     else -> {
-                        val parsed = M3uParser.parseUrl(serverOrUrl())
+                        val parsed = M3uParser.parseUrl(target)
                         getString(R.string.channels_found, parsed.channels.size)
                     }
                 }
@@ -327,12 +414,14 @@ class PlaylistWizardActivity : AppCompatActivity() {
 
     private fun serverOrUrl(): String = when (type) {
         PlaylistType.REMOTE_M3U -> value(R.string.playlist_url)
+        PlaylistType.FILE -> playlistFile
         else -> server()
     }
 
     private fun save() {
-        if (serverOrUrl().isBlank()) {
-            toast(getString(R.string.url_required))
+        val target = serverOrUrl()
+        if (target.isBlank()) {
+            toast(getString(if (type == PlaylistType.FILE) R.string.playlist_file_required else R.string.url_required))
             return
         }
         captureDraft()
@@ -347,7 +436,6 @@ class PlaylistWizardActivity : AppCompatActivity() {
         val login = if (type == PlaylistType.XTREAM) draft.login else ""
         val password = if (type == PlaylistType.XTREAM) draft.password else ""
         val mac = if (type == PlaylistType.STALKER) draft.mac else ""
-        val target = serverOrUrl()
         Thread {
             val result = runCatching {
                 val repo = TvBroApp.repo(this)
@@ -380,6 +468,10 @@ class PlaylistWizardActivity : AppCompatActivity() {
                 val channels = when (type) {
                     PlaylistType.XTREAM -> XtreamApi(server(), login, password).loadChannels()
                     PlaylistType.STALKER -> StalkerApi(server(), mac.ifBlank { null }).loadChannels()
+                    PlaylistType.FILE -> M3uParser.parse(
+                        LocalFile.open(this@PlaylistWizardActivity, target),
+                        null,
+                    ).channels
                     else -> M3uParser.parseUrl(target).channels
                 }
                 if (channels.isEmpty()) error(getString(R.string.playlist_update_failed))
@@ -437,6 +529,21 @@ class PlaylistWizardActivity : AppCompatActivity() {
     companion object {
         const val EXTRA_CHANNELS = "channels"
         const val EXTRA_PLAYLIST_ID = "playlist_id"
+
+        /** The order the types are offered in, which the dialogs keep to. */
+        private val typeOrder = listOf(
+            PlaylistType.REMOTE_M3U,
+            PlaylistType.XTREAM,
+            PlaylistType.STALKER,
+            PlaylistType.FILE,
+        )
+
+        /**
+         * Every file is offered, whatever the system thinks it is: an m3u off a device is served as
+         * a plain file, as an m3u8 playlist or as nothing in particular, and a filter that only let
+         * through the tidy names would hide the file the user is pointing at.
+         */
+        private val ANY_FILE = arrayOf("*/*")
 
         /**
          * Part of the screen height the window may take at most. The floating window follows its

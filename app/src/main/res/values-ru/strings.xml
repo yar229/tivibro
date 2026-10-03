@@ -673,6 +673,13 @@
     <string name="m3u_parameters_hint">Введите название плейлиста и прямую ссылку на M3U-файл. Можно также добавить ссылку на XMLTV EPG.</string>
     <string name="xtream_parameters_hint">Введите адрес сервера, логин и пароль от вашего Xtream Codes API.</string>
     <string name="stalker_parameters_hint">Введите адрес портала и MAC-адрес устройства. Порталы Stalker определяются автоматически.</string>
+    <string name="local_file_parameters">Параметры локального плейлиста</string>
+    <string name="local_file_hint">Выберите файл плейлиста там, где он лежит на устройстве: в папке загрузок, на USB-накопителе или подключённом сетевом диске. Ссылку на XMLTV EPG добавить тоже можно.</string>
+    <string name="playlist_file">Файл плейлиста</string>
+    <string name="choose_file">Выбрать файл</string>
+    <string name="no_file_selected">Файл не выбран</string>
+    <string name="playlist_file_required">Выберите файл плейлиста</string>
+    <string name="file_access_not_kept">Доступ к файлу сохранится только до перезапуска приложения. Если плейлист перестанет обновляться, выберите файл заново.</string>
     <string name="connecting">Подключение:</string>
     <string name="channels_found">Найдено каналов: %1$d</string>
     <string name="connection_successful">Подключение выполнено</string>

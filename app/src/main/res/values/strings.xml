@@ -815,6 +815,13 @@
     <string name="m3u_parameters_hint">Enter the playlist name and the direct link to your M3U file. You can also add an XMLTV EPG link.</string>
     <string name="xtream_parameters_hint">Enter the server address, login and password of your Xtream Codes API.</string>
     <string name="stalker_parameters_hint">Enter the portal address and the MAC address of your device. Stalker portals are detected automatically.</string>
+    <string name="local_file_parameters">Local playlist parameters</string>
+    <string name="local_file_hint">Pick the playlist file where it is kept on this device — the download folder, a USB drive or a mounted network drive. An XMLTV EPG link can be added as well.</string>
+    <string name="playlist_file">Playlist file</string>
+    <string name="choose_file">Choose file</string>
+    <string name="no_file_selected">No file selected</string>
+    <string name="playlist_file_required">Choose a playlist file</string>
+    <string name="file_access_not_kept">The file will stay readable until the app restarts. Pick it again if the playlist stops updating.</string>
     <string name="connecting">Connecting…</string>
     <string name="channels_found">%1$d channels found</string>
     <string name="connection_successful">Connection successful</string>

@@ -18,6 +18,7 @@ import com.tvibro.data.Prefs
 import com.tvibro.data.model.EpgSource
 import com.tvibro.data.model.Playlist
 import com.tvibro.data.model.PlaylistType
+import com.tvibro.data.source.LocalFile
 import com.tvibro.ui.common.Dialogs
 import com.tvibro.ui.common.PinGate
 import com.tvibro.ui.playlist.PlaylistWizardActivity
@@ -482,7 +483,13 @@ class SettingsActivity : AppCompatActivity() {
                     add(SettingItem.PlaylistRow(
                         title = playlist.name,
                         type = getString(playlistTypeLabel(playlist.type)),
-                        url = playlist.url,
+                        // A local playlist is named by the file it came from: its reference is a
+                        // content:// uri, which tells a person nothing and fills the row.
+                        url = if (playlist.type == PlaylistType.FILE) {
+                            LocalFile.displayName(this@SettingsActivity, playlist.url)
+                        } else {
+                            playlist.url
+                        },
                         onEdit = { PlaylistWizardActivity.startEdit(this@SettingsActivity, playlist.id) },
                         onDelete = { confirmDeletePlaylist(playlist) },
                     ))

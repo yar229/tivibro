@@ -294,16 +294,16 @@ class SourceManager(context: Context) {
 
     // ----------------------------------------------------------------- files
 
-    fun loadFromFile(playlist: Playlist): List<Channel> {
-        val file = File(playlist.url)
-        if (!file.exists()) {
-            // try app external files dir
-            val alt = File(android.os.Environment.getExternalStorageDirectory(), playlist.url)
-            if (alt.exists()) return M3uParser.parse(alt.inputStream(), null).channels
-            error("File not found: ${playlist.url}")
-        }
-        return M3uParser.parse(file.inputStream(), null).channels
-    }
+    /**
+     * Reads the playlist of a local one.
+     *
+     * The file is whatever the picker handed over, so it is opened by reference rather than as a
+     * path: a file kept in the download folder or on a mounted drive has a `content://` reference,
+     * and that is the only thing that still opens it after a reboot. A plain path, which is what a
+     * playlist stored before the picker existed holds, is looked for where a file of the app can be.
+     */
+    fun loadFromFile(playlist: Playlist): List<Channel> =
+        M3uParser.parse(LocalFile.open(appContext, playlist.url), null).channels
 
     fun importLocalFile(path: String, name: String, onDone: (Long) -> Unit, onError: (Exception) -> Unit) {
         executor.execute {

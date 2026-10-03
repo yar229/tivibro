@@ -104,6 +104,14 @@ object Http {
         }
     }
 
+    /**
+     * Unpacks a stream that may be gzipped but does not say so.
+     *
+     * A response says it in a header; a file on the device has no headers at all, and the only thing
+     * that tells an `epg.xml.gz` from an `epg.xml` is the magic number at its start.
+     */
+    fun decodeStream(stream: InputStream): InputStream = decoded(BufferedInputStream(stream), null)
+
     private fun decoded(stream: BufferedInputStream, contentEncoding: String?): InputStream {
         val encoding = contentEncoding?.lowercase()
         if (encoding != null) {
