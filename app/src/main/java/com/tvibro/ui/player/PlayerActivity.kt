@@ -163,6 +163,9 @@ private var panelTimeout = 0L
     private var engineFreed = false
     private var isSwitching = false
     private var bufferingChannelId: Long = -1L
+
+    /** Built in onCreate: getWindow() is only usable once the activity is attached. */
+    private lateinit var frameRateSync: FrameRateSync
     /** Last known stream metadata per channel (resolution/fps/audio), reused while a fresh
      *  stream has not reported its own values yet. LRU, bounded to avoid unbounded growth. */
     private val streamMetaCache = object : LinkedHashMap<Long, StreamMeta>(64, 0.75f, true) {
@@ -201,6 +204,7 @@ private var panelTimeout = 0L
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         prefs = Prefs.get(this)
+        frameRateSync = FrameRateSync(this)
         repo = TvBroApp.repo(this)
         setContentView(R.layout.activity_player)
         bindViews()
@@ -300,6 +304,9 @@ private var panelTimeout = 0L
      */
     override fun onStop() {
         super.onStop()
+        // Nothing is being played off screen, so the panel goes back to what it was running before:
+        // the guide and the menus are not video and must not inherit a rate chosen for a channel.
+        if (::frameRateSync.isInitialized) frameRateSync.restore()
         if (handedOver || isFinishing) return
         if (!TvBroApp.get().inForeground) {
             saveWatchTime()
@@ -1091,6 +1098,7 @@ captureFontScale(switchAudioCodec) { prefs.bottomPanelFont }
         val ch = channel ?: return
         val meta = streamMetaCache.getOrPut(ch.id) { StreamMeta() }
         cacheStreamMeta()
+        applyFrameRate(meta.fps)
 
         val height = if (meta.height > 0) meta.height else videoHeight
         val quality = if (prefs.showVideoResolution) {
@@ -1105,7 +1113,10 @@ captureFontScale(switchAudioCodec) { prefs.bottomPanelFont }
         switchQuality.text = quality.orEmpty()
         switchQuality.visible(quality != null)
 
-        switchFps.text = if (meta.fps != null) "${meta.fps!!.toInt()} FPS" else ""
+        switchFps.text = meta.fps?.let { fps ->
+            val req = if (::frameRateSync.isInitialized) frameRateSync.lastRequest else null
+            fpsBadgeLabel(fps, req)
+        }.orEmpty()
         switchFps.visible(meta.fps != null)
 
         switchAudio.text = meta.audio?.let { audioLabel(it) }.orEmpty()
@@ -1116,6 +1127,21 @@ captureFontScale(switchAudioCodec) { prefs.bottomPanelFont }
 
         switchAudioCodec.text = meta.audioCodec.orEmpty()
         switchAudioCodec.visible(meta.audioCodec != null)
+    }
+
+    /**
+     * Hands the screen the frame rate of the stream, which is only known once the stream has been
+     * decoded and so is asked for on every badge refresh. [FrameRateSync] answers by itself when
+     * the panel already runs at a rate that fits, so this stays quiet in the common case.
+     */
+    private fun applyFrameRate(fps: Float?) {
+        if (!::frameRateSync.isInitialized) return
+        if (!prefs.autoFrameRate) {
+            frameRateSync.restore()
+            return
+        }
+        if (!::engine.isInitialized) return
+        frameRateSync.apply(fps, engine.frameRateSurface())
     }
 
     private fun audioLabel(channels: Int): String = when (channels) {
@@ -2041,10 +2067,10 @@ captureFontScale(switchAudioCodec) { prefs.bottomPanelFont }
 class StreamMeta {
     var width: Int = 0
     var height: Int = 0
-        var fps: Float? = null
-        var audio: Int? = null
-        var videoCodec: String? = null
-        var audioCodec: String? = null
+    var fps: Float? = null
+    var audio: Int? = null
+    var videoCodec: String? = null
+    var audioCodec: String? = null
 
     val resolution: String? get() =
         if (width > 0 && height > 0) "${width}x${height}" else null

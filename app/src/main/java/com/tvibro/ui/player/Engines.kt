@@ -7,6 +7,8 @@ import android.media.MediaExtractor
 import android.media.MediaFormat
 import android.os.Handler
 import android.os.Looper
+import android.view.Surface
+import android.view.SurfaceView
 import android.view.TextureView
 import android.view.View
 import android.view.ViewGroup
@@ -63,6 +65,13 @@ fun videoSize(): Pair<Int, Int>?
        * of the view, or the frame would slide off the screen and uncover what is behind it.
        */
       fun contentSize(): Pair<Float, Float>? = null
+
+      /**
+       * The surface the picture is decoded into, when the engine has one. A SurfaceView owns a
+       * Surface, a TextureView draws through its own texture and owns none, so this is null for VLC
+       * and whoever needs the surface has to fall back on the window.
+       */
+      fun frameRateSurface(): Surface? = null
     fun videoFps(): Float?
     fun audioChannels(): Int?
     fun videoCodecLabel(): String? = null
@@ -420,6 +429,13 @@ class ExoEngine(
     override fun videoFps(): Float? {
         spsInfo?.frameRate?.let { if (it > 0) return it }
         return runCatching { player.videoFormat?.frameRate?.takeIf { it > 0 } }.getOrNull()
+    }
+
+    override fun frameRateSurface(): Surface? {
+        // Media3 draws into a SurfaceView by default, and its holder is the surface the picture ends
+        // up in, which is also the one surface that can be told what the frame rate should be.
+        val view = playerView.videoSurfaceView as? SurfaceView ?: return null
+        return view.holder.surface.takeIf { it.isValid }
     }
 
     override fun audioChannels(): Int? = runCatching {
