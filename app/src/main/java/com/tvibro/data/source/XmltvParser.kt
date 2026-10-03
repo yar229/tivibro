@@ -100,9 +100,16 @@ class XmltvParser(
                         continue
                     }
 
-                    "desc" -> if (current != null && storeDescriptions) {
-                        descs = readText(parser, descs)
-                        event = parser.eventType
+                    "desc" -> if (current != null) {
+                        if (storeDescriptions) {
+                            descs = readText(parser, descs)
+                            event = parser.eventType
+                            continue
+                        }
+                        // Skipped as a whole rather than left to walk into on its own. The text is
+                        // the bulk of a guide file and <desc> may carry markup of its own, so
+                        // stepping through it costs the one thing this setting is there to save.
+                        event = skipTag(parser)
                         continue
                     }
 
@@ -155,9 +162,48 @@ class XmltvParser(
 
     private fun readText(parser: XmlPullParser, into: HashMap<String, String>): HashMap<String, String> {
         val lang = parser.getAttributeValue(null, "lang").orEmpty()
-        val text = parser.nextText()
+        val text = readNestedText(parser)
         if (text.isNotBlank()) into[lang] = text
         return into
+    }
+
+    /**
+     * The text of an element, markup and all.
+     *
+     * XMLTV writes a description as paragraphs of its own inside `<desc>`, and asking the parser for
+     * the text of such an element in one go is an error: it threw, and since the whole document is
+     * read in one pass, that took the entire EPG source down with it rather than losing one field.
+     * Block elements are therefore read as line breaks, the way they were meant to be read, while
+     * inline ones such as `<b>` or `<span>` are left to run into the text around them.
+     */
+    private fun readNestedText(parser: XmlPullParser): String {
+        val out = StringBuilder()
+        var depth = 1
+        var event = parser.next()
+        while (depth > 0 && event != XmlPullParser.END_DOCUMENT) {
+            when (event) {
+                XmlPullParser.START_TAG -> {
+                    if (parser.name.lowercase(Locale.US) in BLOCK_TAGS) lineBreak(out)
+                    depth++
+                }
+
+                XmlPullParser.END_TAG -> {
+                    depth--
+                    if (parser.name.lowercase(Locale.US) in BLOCK_TAGS) lineBreak(out)
+                }
+
+                XmlPullParser.TEXT, XmlPullParser.CDSECT -> out.append(parser.text.orEmpty())
+            }
+            event = parser.next()
+        }
+        return out.toString().trim()
+    }
+
+    /** A line break after whatever text is there, without piling up blank ones. */
+    private fun lineBreak(out: StringBuilder) {
+        val trimmed = out.toString().trimEnd()
+        out.setLength(trimmed.length)
+        if (out.isNotEmpty() && out.last() != '\n') out.append('\n')
     }
 
     private fun pick(map: Map<String, String>): String {
@@ -178,6 +224,9 @@ class XmltvParser(
     }
 
     companion object {
+        /** The elements that end a line inside a text of their own rather than running on. */
+        private val BLOCK_TAGS = setOf("p", "div", "li", "br")
+
         private val formats = arrayOf(
             "yyyyMMddHHmmss Z",
             "yyyyMMddHHmmss",

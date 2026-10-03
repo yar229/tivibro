@@ -405,6 +405,7 @@
     <string name="past_days_to_keep">Past days to keep EPG</string>
     <string name="clear_epg">Clear EPG</string>
     <string name="store_descriptions">Store program descriptions</string>
+    <string name="store_descriptions_hint">Applies to the next EPG update. Descriptions already stored stay in the database until then.</string>
     <string name="full_scan">Full scan</string>
     <string name="full_scan_hint">By default the app performs partial scanning of EPG source to get the list of channels to ensure maximum performance. For some EPG sources, this may lead to the absence of some channels. If you see that a lot of channels are missing, try a full scan. It may take longer.</string>
     <string name="assign_epg">Assign EPG</string>
