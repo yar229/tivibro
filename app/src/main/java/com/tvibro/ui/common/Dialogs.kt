@@ -149,6 +149,9 @@ object Dialogs {
         // so this single call covers all of them.
         view.applyPanelTransparency(context)
         dialog.setContentView(view)
+        // Theme.TvBro.Dialog leaves windowCloseOnTouchOutside off and a plain Dialog never turns it
+        // on by itself, so without this the only ways out were Back and the back swipe.
+        dialog.setCanceledOnTouchOutside(true)
         dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
         dialog.window?.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
         return dialog
