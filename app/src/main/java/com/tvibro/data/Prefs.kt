@@ -290,8 +290,9 @@ class Prefs private constructor(context: Context) {
         get() = sp.getInt(KEY_EPG_OFFSET, 0)
         set(v) = sp.edit { putInt(KEY_EPG_OFFSET, v) }
 
+    /** How many days of finished programmes the guide keeps. */
     var pastDaysToKeep: Int
-        get() = sp.getInt(KEY_PAST_DAYS, 7)
+        get() = sp.getInt(KEY_PAST_DAYS, 1)
         set(v) = sp.edit { putInt(KEY_PAST_DAYS, v) }
 
     var storeDescriptions: Boolean
