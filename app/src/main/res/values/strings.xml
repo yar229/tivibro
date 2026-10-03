@@ -476,7 +476,6 @@
     <string name="highlight_progress_only">Highlight progress only</string>
     <string name="dim_past_programs">Dim past programs</string>
     <string name="show_past_programs">Show past programs without catch-up</string>
-    <string name="show_description_when_switching">Show description when switching channels only</string>
     <string name="show_info_at_bottom">Show info panel at the bottom when switching channels</string>
     <string name="overlay_mode">Overlay mode</string>
     <string name="preview_mode">Preview mode</string>
@@ -818,7 +817,6 @@
     <string name="channels_found">%1$d channels found</string>
     <string name="connection_successful">Connection successful</string>
     <string name="pin_code_hint">Requests a PIN code before playing channels. Leave the field empty to disable it.</string>
-    <string name="show_description_when_switching_channels_only">Show description when switching channels only</string>
     <string name="channel_logo">Channel logo</string>
     <string name="app_logo">App logo</string>
     <string name="switch_desc_lines">Max programme description lines</string>
