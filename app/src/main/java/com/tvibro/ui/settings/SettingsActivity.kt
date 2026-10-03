@@ -12,6 +12,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.tvibro.R
 import com.tvibro.TvBroApp
+import com.tvibro.base.Fmt
 import com.tvibro.base.toast
 import com.tvibro.data.Prefs
 import com.tvibro.data.model.EpgSource
@@ -491,10 +492,8 @@ class SettingsActivity : AppCompatActivity() {
         }
 
         group(R.string.epg) {
-            add(SettingItem.Number(
+            add(SettingItem.Offset(
                 getString(R.string.epg_offset),
-                min = -12,
-                max = 12,
                 get = { prefs.epgOffsetMinutes },
                 set = { prefs.epgOffsetMinutes = it },
             ))
@@ -710,6 +709,22 @@ class SettingsActivity : AppCompatActivity() {
                     inputType = InputType.TYPE_CLASS_NUMBER,
                     onOk = { text, _ ->
                         val value = text.toIntOrNull() ?: return@input
+                        item.set(value.coerceIn(item.min, item.max))
+                        settingsAdapter.notifyDataSetChanged()
+                    },
+                ).show()
+            }
+            is SettingItem.Offset -> {
+                // Typed as hours and minutes rather than as two numbers, so an hour is written the
+                // same way it is read back in the row beside it.
+                Dialogs.input(
+                    this,
+                    item.title,
+                    value = Fmt.formatOffsetMinutes(item.get()),
+                    hint = getString(R.string.epg_offset_hint),
+                    inputType = InputType.TYPE_CLASS_TEXT,
+                    onOk = { text, _ ->
+                        val value = Fmt.parseOffsetMinutes(text) ?: return@input
                         item.set(value.coerceIn(item.min, item.max))
                         settingsAdapter.notifyDataSetChanged()
                     },

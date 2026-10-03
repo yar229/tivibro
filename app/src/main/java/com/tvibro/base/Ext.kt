@@ -95,6 +95,31 @@ object Fmt {
     fun timeRange(start: Long, stop: Long, locale: Locale): String =
         time(start, locale) + " - " + time(stop, locale)
 
+    /** A signed shift of the guide in "h:mm", e.g. "0:00", "-1:30", "2:05". */
+    fun formatOffsetMinutes(minutes: Int): String {
+        val abs = if (minutes < 0) -minutes else minutes
+        val sign = if (minutes < 0) "-" else ""
+        return String.format(Locale.US, "%s%d:%02d", sign, abs / 60, abs % 60)
+    }
+
+    /**
+     * Reads what [formatOffsetMinutes] writes, e.g. "-1:30" for an hour and a half back, and gives
+     * back the minutes the setting holds. A bare number is taken as hours, which is how the row
+     * this replaced took its value. Returns null for anything else, so a half-typed hour does not
+     * quietly turn into a shift of zero.
+     */
+    fun parseOffsetMinutes(text: String): Int? {
+        val body = text.trim().let { if (it.startsWith("-") || it.startsWith("+")) it.substring(1) else it }
+        if (body.isEmpty()) return null
+        val parts = body.split(':')
+        if (parts.size > 2) return null
+        val hours = parts[0].trim().toIntOrNull() ?: return null
+        val minutes = if (parts.size == 2) parts[1].trim().toIntOrNull() ?: return null else 0
+        if (hours < 0 || minutes < 0 || minutes > 59) return null
+        val total = hours * 60 + minutes
+        return if (text.trim().startsWith("-")) -total else total
+    }
+
     fun elapsedText(start: Long, now: Long): String {
         val diff = now - start
         if (diff < 0) return ""

@@ -243,7 +243,11 @@ internal fun Cursor.toChannel(): Channel = Channel(
     isSeries = bool("is_series"),
 )
 
-internal fun Cursor.toProgram(): Program = Program(
+/**
+ * Reads a programme out of a row. [epgOffsetMs] moves it onto the wall clock when the user has put
+ * the guide on a different time from the source's, and stays out of the way when they have not.
+ */
+internal fun Cursor.toProgram(epgOffsetMs: Long = 0): Program = Program(
     id = long("id"),
     channelId = long("channel_id"),
     tvgId = str("tvg_id"),
@@ -252,8 +256,8 @@ internal fun Cursor.toProgram(): Program = Program(
     description = str("description"),
     category = str("category"),
     icon = str("icon"),
-    start = long("start"),
-    stop = long("stop"),
+    start = long("start") + epgOffsetMs,
+    stop = long("stop") + epgOffsetMs,
 )
 
 internal fun Cursor.toEpgSource(): EpgSource = EpgSource(
