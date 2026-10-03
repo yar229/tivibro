@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import com.tvibro.data.Prefs
 import com.tvibro.data.model.Channel
+import com.tvibro.data.source.pastCutoff
 import com.tvibro.data.model.ChannelFilter
 import com.tvibro.data.model.EpgSource
 import com.tvibro.data.model.Playlist
@@ -459,6 +460,42 @@ class TvBroRepositoryTest {
 
         repo.clearProgramsBefore(stored + 4 * 3600_000L)
         assertTrue(repo.programsFor(channelId, stored - 1000L, stored + 5 * 3600_000L).isEmpty())
+    }
+
+    /** A day of history is the default, so yesterday's programme stays and the day before goes. */
+    @Test
+    fun `a day of history is kept and the day before it is not`() {
+        val now = 1_700_000_000_000L
+        val channelId = channelWithProgrammeOver("a")
+        repo.replacePrograms(listOf(channelId), listOf(
+            Program(channelId = channelId, title = "Old", start = now - 3 * 86_400_000L, stop = now - 3 * 86_400_000L + 3600_000L),
+            Program(channelId = channelId, title = "Yesterday", start = now - 12 * 3600_000L, stop = now - 12 * 3600_000L + 3600_000L),
+        ))
+
+        repo.clearProgramsBefore(pastCutoff(now, 1))
+
+        val left = repo.programsFor(channelId, now - 4 * 86_400_000L, now).map { it.title }
+        assertEquals(listOf("Yesterday"), left)
+    }
+
+    /** A week of history keeps three days that a single day would have thrown away. */
+    @Test
+    fun `a deeper history keeps what a shallow one would drop`() {
+        val now = 1_700_000_000_000L
+        val channelId = channelWithProgrammeOver("a")
+        repo.replacePrograms(listOf(channelId), listOf(
+            Program(channelId = channelId, title = "ThreeDays", start = now - 3 * 86_400_000L, stop = now - 3 * 86_400_000L + 3600_000L),
+        ))
+
+        repo.clearProgramsBefore(pastCutoff(now, 7))
+
+        assertEquals(1, repo.programsFor(channelId, now - 4 * 86_400_000L, now).size)
+    }
+
+    private fun channelWithProgrammeOver(streamId: String): Long {
+        val pid = repo.insertPlaylist(playlist())
+        repo.insertChannels(pid, listOf(channel(streamId)))
+        return repo.channels(listOf(pid), "", ChannelFilter.ALL, "manual").first { it.streamId == streamId }.id
     }
 
     private fun channelWithProgram(streamId: String, title: String, start: Long): Long {

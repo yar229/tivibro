@@ -28,6 +28,13 @@ data class EpgProgress(
     val channelsTotal: Int = 0,
 )
 
+/**
+ * The instant before which a finished programme is no longer kept, on the scale the rows are stored
+ * on. The same line draws the window an import looks at and the depth the database is trimmed to,
+ * so a programme is never fetched and then thrown away, or kept past what the user asked for.
+ */
+internal fun pastCutoff(now: Long, days: Int): Long = now - days * 86_400_000L
+
 class SourceManager(context: Context) {
 
     private val repo = TvBroRepository.get(context)
@@ -140,7 +147,8 @@ class SourceManager(context: Context) {
         if (urls.isEmpty()) return emptyMap()
 
         val now = System.currentTimeMillis()
-        val from = now - 2 * 24 * 3600_000L
+        val pastDays = TvBroApp.prefs(appContext).pastDaysToKeep.coerceAtLeast(1)
+        val from = pastCutoff(now, pastDays)
         val to = now + 7 * 24 * 3600_000L
         val list = channels ?: repo.channels(
             listOf(playlist.id), "", ChannelFilter.TV, "order", showHidden = true, showBlocked = true
@@ -197,6 +205,7 @@ class SourceManager(context: Context) {
             repo.replacePrograms(listOf(channelId), programs)
             stored[channelId] = programs
         }
+        pruneHistory(pastDays)
         return stored
     }
 
@@ -266,10 +275,19 @@ class SourceManager(context: Context) {
         }
     }
 
+    /**
+     * Trims the guide to the depth in days. This runs after a write rather than on a timer of its own,
+     * so the history is cut whenever it can have grown and never in the background for nothing. The
+     * cutoff is walked on the stored scale inside the repository, where the guide's own shift is known,
+     * so a programme still on screen by the user's reckoning is not taken away underneath them.
+     */
+    private fun pruneHistory(days: Int) {
+        repo.clearProgramsBefore(pastCutoff(System.currentTimeMillis(), days))
+    }
+
     fun pruneOldPrograms(days: Int, onDone: (() -> Unit)? = null) {
         executor.execute {
-            val cutoff = System.currentTimeMillis() - days * 24 * 3600_000L
-            repo.clearProgramsBefore(cutoff)
+            pruneHistory(days.coerceAtLeast(0))
             if (onDone != null) onMain { onDone() }
         }
     }
