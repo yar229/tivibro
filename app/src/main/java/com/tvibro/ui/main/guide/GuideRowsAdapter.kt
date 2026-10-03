@@ -1,10 +1,12 @@
 package com.tvibro.ui.main.guide
 
+import android.graphics.Typeface
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.RecyclerView
 import com.tvibro.R
 import com.tvibro.base.Fmt
@@ -69,6 +71,8 @@ class GuideRowsAdapter(
         var filledDay: Long = 0L
         var filledDays: Int = 0
         var filledHighlight: Boolean = false
+        /** The programme this row was last marked as being on air, to spot a change on the clock. */
+        var styledNow: Program? = null
         var builtFrom: Int = 0
         var builtTo: Int = 0
     }
@@ -412,25 +416,80 @@ class GuideRowsAdapter(
 
     /** Restyles the cells of the attached rows after the pick, the crosshair or the clock changed. */
     private fun applyHighlight() {
+        val now = System.currentTimeMillis()
         for (holder in rows) {
             val content = holder.content
             for (index in 0 until content.childCount) {
                 val cell = content.getChildAt(index)
                 val program = cell.tag as? Program ?: continue
-                val selected = isSelected(holder.channelPosition, program)
-                val focused = focusedChannel == holder.channelPosition && focusedCell === program
-                cell.setBackgroundResource(backgroundFor(program, selected, focused))
-                cell.isSelected = selected
+                restyleCell(
+                    cell,
+                    program,
+                    isSelected(holder.channelPosition, program),
+                    focusedChannel == holder.channelPosition && focusedCell === program,
+                    now,
+                )
             }
+            holder.styledNow = runningAt(holder.filledList, now)
         }
     }
 
-    private fun backgroundFor(program: Program, selected: Boolean, focused: Boolean): Int = when {
+    /**
+     * The whole look of one cell: the frame from [backgroundFor] and the weight of its text.
+     *
+     * The programme that is on air has to be found by looking at a wall of small boxes from across
+     * the room, so it gets more than a tinted background: a bold title and a time line at full
+     * contrast, where a finished or a later one stays plain. Cells are pooled and restyled on every
+     * pass, so both halves are always written instead of only when they change.
+     */
+    private fun restyleCell(cell: View, program: Program, selected: Boolean, focused: Boolean, now: Long) {
+        val current = isCurrent(program, now)
+        cell.setBackgroundResource(backgroundFor(program, selected, focused, now))
+        cell.isSelected = selected
+        cell.findViewById<TextView>(R.id.program_title).typeface =
+            if (current) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
+        cell.findViewById<TextView>(R.id.program_time).setTextColor(
+            ContextCompat.getColor(
+                cell.context,
+                if (current) R.color.text_primary else R.color.text_secondary,
+            )
+        )
+    }
+
+    private fun backgroundFor(program: Program, selected: Boolean, focused: Boolean, now: Long): Int = when {
         selected -> R.drawable.bg_epg_selected
         focused -> R.drawable.bg_epg_focus
-        highlightCurrent && System.currentTimeMillis() in program.start until program.stop ->
-            R.drawable.bg_epg_now
+        isCurrent(program, now) -> R.drawable.bg_epg_now
         else -> R.drawable.bg_epg_cell
+    }
+
+    /** A programme that is on air at [now], and only while the highlight is asked for. */
+    private fun isCurrent(program: Program, now: Long): Boolean =
+        highlightCurrent && now in program.start until program.stop
+
+    /** The programme of a row that is on air at [now], or null when the row carries none there. */
+    private fun runningAt(list: List<Program>?, now: Long): Program? =
+        list?.firstOrNull { now in it.start until it.stop }
+
+    /**
+     * Moves the "on air" marking along with the clock.
+     *
+     * A cell is otherwise only restyled when its row is rebuilt, when the pick moves or when the
+     * crosshair lands on it, so a programme that has just ended would keep the marking of the one
+     * that is on now. This runs from the per-second tick and stays cheap: it compares one programme
+     * per attached row and repaints nothing unless that programme actually changed.
+     */
+    fun refreshNow() {
+        if (!highlightCurrent) return
+        val now = System.currentTimeMillis()
+        var changed = false
+        for (holder in rows) {
+            if (runningAt(holder.filledList, now) !== holder.styledNow) {
+                changed = true
+                break
+            }
+        }
+        if (changed) applyHighlight()
     }
 
     fun pixelForTime(time: Long): Int = ((time - gridStart) / 3_600_000f * hourWidth).toInt()
@@ -568,6 +627,7 @@ class GuideRowsAdapter(
     private fun fill(holder: RowHolder, list: List<Program>) {
         val content = holder.content
         val inflater = LayoutInflater.from(content.context)
+        val now = System.currentTimeMillis()
         val margin = content.resources.getDimensionPixelSize(R.dimen.epg_cell_margin) * 2
         // The row is padded out to the full range anyway, so that filler costs one empty view.
         for (index in content.childCount - 1 downTo 0) {
@@ -610,12 +670,12 @@ class GuideRowsAdapter(
             cell.findViewById<TextView>(R.id.program_title).text = program.title
             cell.findViewById<TextView>(R.id.program_time).text =
                 Fmt.time(program.start) + " - " + Fmt.time(program.stop)
-            cell.setBackgroundResource(
-                backgroundFor(
-                    program,
-                    isSelected(holder.channelPosition, program),
-                    focusedChannel == holder.channelPosition && focusedCell === program,
-                )
+            restyleCell(
+                cell,
+                program,
+                isSelected(holder.channelPosition, program),
+                focusedChannel == holder.channelPosition && focusedCell === program,
+                now,
             )
             cell.setOnClickListener { onProgramClick(holder.channelPosition, program) }
             // Every cell is a focus target, so a remote can walk the grid, and the cell that holds
@@ -644,6 +704,7 @@ class GuideRowsAdapter(
         holder.filledDay = gridStart
         holder.filledDays = loadedDays
         holder.filledHighlight = highlightCurrent
+        holder.styledNow = runningAt(list, now)
         holder.builtFrom = windowFrom
         holder.builtTo = windowTo
     }

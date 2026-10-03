@@ -51,6 +51,10 @@
     <color name="subtitle_bg">#B3141A22</color>
     <color name="epg_now">#FF3B5998</color>
     <color name="epg_past">#33E7ECF3</color>
+    <!-- The cell of the programme that is on air: a panel of its own plus a frame brighter than
+         focus_frame, so "on now" cannot be mistaken for the crosshair or the pick -->
+    <color name="epg_now_fill">#4D3B5998</color>
+    <color name="epg_now_frame">#FF1565C0</color>
 
     <!-- Translucent layers that used to be written as literal hex in their drawables -->
     <color name="row_overlay">#0A000000</color>

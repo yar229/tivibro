@@ -544,6 +544,7 @@ class MainActivity : AppCompatActivity() {
         clockView.visible(prefs.showClock)
         clockView.text = clockFormat.format(Date(now))
         positionNowLine()
+        guideRowsAdapter.refreshNow()
         updateGuideInfo()
     }
 

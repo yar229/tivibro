@@ -1,4 +1,8 @@
-<?xml version="1.0" encoding="utf-8"?><shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
-    <solid android:color="@color/epg_past" />
-    <stroke android:width="1dp" android:color="@color/epg_now" />
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The programme that is on air right now. It has to be picked out of a wall of small boxes from
+     across the room, so it carries a tinted panel and a bright frame of its own: the focus and the
+     selected cell keep their frames, which lets the three states be told apart at a glance. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="@color/epg_now_fill" />
+    <stroke android:width="2dp" android:color="@color/epg_now_frame" />
 </shape>
