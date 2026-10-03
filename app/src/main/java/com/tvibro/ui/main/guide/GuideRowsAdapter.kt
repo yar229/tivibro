@@ -40,6 +40,7 @@ class GuideRowsAdapter(
     private var gridStart = Fmt.startOfDay(System.currentTimeMillis())
     private var loadedDays = INITIAL_DAYS
     private var highlightCurrent = true
+    private var dimPast = true
     private var showPast = false
     private var offset = 0
     private var viewport = 0
@@ -145,6 +146,20 @@ class GuideRowsAdapter(
         clearSelection()
         focusedCell = null
         notifyDataSetChanged()
+    }
+
+    /**
+     * Whether a programme that has finished is pushed back instead of looking like an upcoming one.
+     *
+     * This is about how a cell looks, not whether it exists: the past is only on screen when
+     * [setShowPast] put it there, so with the past hidden there is nothing left to dim and the two
+     * options work together. The pick and the crosshair keep their own look, so a finished
+     * programme stays readable while the user stands on it.
+     */
+    fun setDimPast(enabled: Boolean) {
+        if (dimPast == enabled) return
+        dimPast = enabled
+        applyHighlight()
     }
 
     /** Width of the visible part of the grid, needed to clamp the offset. */
@@ -467,28 +482,42 @@ class GuideRowsAdapter(
      */
     private fun restyleCell(cell: View, program: Program, selected: Boolean, focused: Boolean, now: Long) {
         val current = isCurrent(program, now)
+        val dim = isDimmed(program, selected, focused, now)
         cell.setBackgroundResource(backgroundFor(program, selected, focused, now))
         cell.isSelected = selected
-        cell.findViewById<TextView>(R.id.program_title).typeface =
-            if (current) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
-        cell.findViewById<TextView>(R.id.program_time).setTextColor(
-            ContextCompat.getColor(
-                cell.context,
-                if (current) R.color.text_primary else R.color.text_secondary,
+        cell.findViewById<TextView>(R.id.program_title).apply {
+            typeface = if (current) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
+            alpha = if (dim) DIMMED_ALPHA else 1f
+        }
+        cell.findViewById<TextView>(R.id.program_time).apply {
+            setTextColor(
+                ContextCompat.getColor(
+                    cell.context,
+                    if (current) R.color.text_primary else R.color.text_secondary,
+                )
             )
-        )
+            alpha = if (dim) DIMMED_ALPHA else 1f
+        }
     }
 
     private fun backgroundFor(program: Program, selected: Boolean, focused: Boolean, now: Long): Int = when {
         selected -> R.drawable.bg_epg_selected
         focused -> R.drawable.bg_epg_focus
         isCurrent(program, now) -> R.drawable.bg_epg_now
+        isDimmed(program, selected, focused, now) -> R.drawable.bg_epg_past
         else -> R.drawable.bg_epg_cell
     }
 
     /** A programme that is on air at [now], and only while the highlight is asked for. */
     private fun isCurrent(program: Program, now: Long): Boolean =
         highlightCurrent && now in program.start until program.stop
+
+    /**
+     * A programme that has run out and is asked to look like it belongs to the part of the axis
+     * that has gone by. The pick and the crosshair are exempt: the user is reading that one.
+     */
+    private fun isDimmed(program: Program, selected: Boolean, focused: Boolean, now: Long): Boolean =
+        dimPast && !selected && !focused && !isCurrent(program, now) && now >= program.stop
 
     /** The programme of a row that is on air at [now], or null when the row carries none there. */
     private fun runningAt(list: List<Program>?, now: Long): Program? =
@@ -503,7 +532,7 @@ class GuideRowsAdapter(
      * per attached row and repaints nothing unless that programme actually changed.
      */
     fun refreshNow() {
-        if (!highlightCurrent) return
+        if (!highlightCurrent && !dimPast) return
         val now = System.currentTimeMillis()
         var changed = false
         for (holder in rows) {
@@ -750,6 +779,8 @@ class GuideRowsAdapter(
         /** Hours of the axis built around the visible window on both sides. */
         private const val WINDOW_MARGIN_HOURS = 2
         private const val CELL_POOL_MAX = 120
+        /** Opacity of the text of a programme that has finished and is dimmed. */
+        private const val DIMMED_ALPHA = 0.5f
         /** Length of one stand-in cell on a channel the EPG says nothing about. */
         const val PLACEHOLDER_HOURS = 2
         private const val PLACEHOLDER_MS = PLACEHOLDER_HOURS * 3_600_000L

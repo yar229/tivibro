@@ -52,6 +52,8 @@
     <!-- A stronger tint than the day palette needs: over a dark panel a light one disappears -->
     <color name="epg_now_fill">#663B5998</color>
     <color name="epg_now_frame">#FF42A5F5</color>
+    <color name="epg_past_fill">#14000000</color>
+    <color name="epg_past_frame">#803C434C</color>
 
     <!-- Translucent layers that used to be written as literal hex in their drawables -->
     <color name="row_overlay">#80000000</color>
