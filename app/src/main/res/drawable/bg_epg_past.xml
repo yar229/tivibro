@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A programme that has run out: pushed back behind what is still to come. The scrim darkens in
+     both the day and the night palette, because in both of them the cell should sink rather than
+     come forward, and the frame is a faded outline so the cell reads as part of the row. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="@color/epg_past_fill" />
+    <stroke android:width="1dp" android:color="@color/epg_past_frame" />
+</shape>
