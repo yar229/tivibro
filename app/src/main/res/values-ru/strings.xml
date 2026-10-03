@@ -379,6 +379,7 @@
     <string name="epg_update_interval">Интервал обновления EPG, ч</string>
     <string name="failed_to_load_epg_channels">Не удалось загрузить каналы EPG</string>
     <string name="epg_offset">Смещение времени EPG, ч:мин</string>
+    <string name="epg_offset_hint">например 0:00, -1:30, 2:15</string>
     <string name="epg_sources_priority">Приоритет источников EPG</string>
     <string name="epg_sources_hint">Источники EPG необходимо назначить в настройках плейлиста</string>
     <string name="unassigned_source_hint">Этот источник EPG не назначен ни одному плейлисту. Назначить его можно в настройках плейлиста.</string>

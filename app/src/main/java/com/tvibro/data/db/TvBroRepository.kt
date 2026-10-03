@@ -2,6 +2,8 @@ package com.tvibro.data.db
 
 import android.content.Context
 import com.tvibro.TvBroApp
+import com.tvibro.data.EpgOffset
+import com.tvibro.data.Prefs
 import com.tvibro.data.model.Channel
 import com.tvibro.data.model.ChannelFilter
 import com.tvibro.data.model.EpgSource
@@ -14,7 +16,8 @@ import java.util.concurrent.ConcurrentHashMap
 
 class TvBroRepository internal constructor(context: Context) {
 
-    private val helper = TvBroDatabase(context.applicationContext)
+    private val appContext = context.applicationContext
+    private val helper = TvBroDatabase(appContext)
     private val db get() = helper.writableDatabase
 
     // group list cache: playlistId -> list of group names in playlist order
@@ -426,8 +429,13 @@ class TvBroRepository internal constructor(context: Context) {
         val durationMs: Long,
     )
 
+    /**
+     * Drops what the guide no longer shows. [cutoff] is a wall-clock instant, so it is walked on the
+     * stored scale here: with the guide moved forward, a row that is still on screen would sit on
+     * the wrong side of the line and be thrown away while it is still the programme on air.
+     */
     fun clearProgramsBefore(cutoff: Long) {
-        db.delete("programs", "stop < ?", arrayOf(cutoff.toString()))
+        db.delete("programs", "stop < ?", arrayOf(EpgOffset.toStored(cutoff, epgOffsetMs).toString()))
     }
 
     fun deleteChannel(id: Long) {
@@ -535,16 +543,30 @@ class TvBroRepository internal constructor(context: Context) {
 
     // -------------------------------------------------------------- programs
 
+    /**
+     * The user's shift of the guide in milliseconds, read per query rather than kept here: the
+     * setting can be moved at any moment and nothing has to be rebuilt or reimported for it.
+     */
+    private val epgOffsetMs: Long
+        get() = EpgOffset.ms(Prefs.get(appContext).epgOffsetMinutes)
+
     fun programsFor(channelId: Long, from: Long, to: Long): List<Program> =
         db.rawQuery(
             "SELECT * FROM programs WHERE channel_id=? AND stop>? AND start<? ORDER BY start ASC",
-            arrayOf(channelId.toString(), from.toString(), to.toString())
+            arrayOf(
+                channelId.toString(),
+                EpgOffset.toStored(from, epgOffsetMs).toString(),
+                EpgOffset.toStored(to, epgOffsetMs).toString(),
+            )
         ).use { c -> collectPrograms(c) }
 
     fun programsForChannels(channelIds: List<Long>, from: Long, to: Long): Map<Long, List<Program>> {
         if (channelIds.isEmpty()) return emptyMap()
         val ph = channelIds.joinToString(",") { "?" }
-        val args = arrayListOf(from.toString(), to.toString())
+        val args = arrayListOf(
+            EpgOffset.toStored(from, epgOffsetMs).toString(),
+            EpgOffset.toStored(to, epgOffsetMs).toString(),
+        )
         args += channelIds.map { it.toString() }
         return db.rawQuery(
             "SELECT * FROM programs WHERE stop>? AND start<? AND channel_id IN ($ph) ORDER BY channel_id, start ASC",
@@ -552,29 +574,34 @@ class TvBroRepository internal constructor(context: Context) {
         ).use { c ->
             val map = HashMap<Long, MutableList<Program>>()
             while (c.moveToNext()) {
-                val p = c.toProgram()
+                val p = c.toProgram(epgOffsetMs)
                 map.getOrPut(p.channelId) { ArrayList() } += p
             }
             map
         }
     }
 
-    fun currentProgram(channelId: Long, now: Long = System.currentTimeMillis()): Program? =
-        db.rawQuery(
+    fun currentProgram(channelId: Long, now: Long = System.currentTimeMillis()): Program? {
+        val at = EpgOffset.toStored(now, epgOffsetMs)
+        return db.rawQuery(
             "SELECT * FROM programs WHERE channel_id=? AND start<=? AND stop>? ORDER BY start DESC LIMIT 1",
-            arrayOf(channelId.toString(), now.toString(), now.toString())
-        ).use { if (it.moveToFirst()) it.toProgram() else null }
+            arrayOf(channelId.toString(), at.toString(), at.toString())
+        ).use { if (it.moveToFirst()) it.toProgram(epgOffsetMs) else null }
+    }
 
-    fun programAt(channelId: Long, time: Long): Program? =
-        db.rawQuery(
+    fun programAt(channelId: Long, time: Long): Program? {
+        val at = EpgOffset.toStored(time, epgOffsetMs)
+        return db.rawQuery(
             "SELECT * FROM programs WHERE channel_id=? AND start<=? AND stop>? ORDER BY start DESC LIMIT 1",
-            arrayOf(channelId.toString(), time.toString(), time.toString())
-        ).use { if (it.moveToFirst()) it.toProgram() else null }
+            arrayOf(channelId.toString(), at.toString(), at.toString())
+        ).use { if (it.moveToFirst()) it.toProgram(epgOffsetMs) else null }
+    }
 
     fun programsMapFor(channelIds: List<Long>, now: Long): Map<Long, Program> {
         if (channelIds.isEmpty()) return emptyMap()
         val ph = channelIds.joinToString(",") { "?" }
-        val args = arrayListOf(now.toString(), now.toString())
+        val at = EpgOffset.toStored(now, epgOffsetMs)
+        val args = arrayListOf(at.toString(), at.toString())
         args += channelIds.map { it.toString() }
         return db.rawQuery(
             "SELECT p.* FROM programs p INNER JOIN (" +
@@ -584,7 +611,7 @@ class TvBroRepository internal constructor(context: Context) {
         ).use { c ->
             val map = HashMap<Long, Program>()
             while (c.moveToNext()) {
-                val p = c.toProgram()
+                val p = c.toProgram(epgOffsetMs)
                 map[p.channelId] = p
             }
             map
@@ -631,8 +658,9 @@ class TvBroRepository internal constructor(context: Context) {
     }
 
     private fun collectPrograms(c: android.database.Cursor): List<Program> {
+        val offsetMs = epgOffsetMs
         val out = ArrayList<Program>()
-        while (c.moveToNext()) out += c.toProgram()
+        while (c.moveToNext()) out += c.toProgram(offsetMs)
         return out
     }
 

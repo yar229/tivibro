@@ -8,6 +8,7 @@ import android.widget.TextView
 import androidx.appcompat.widget.SwitchCompat
 import androidx.recyclerview.widget.RecyclerView
 import com.tvibro.R
+import com.tvibro.base.Fmt
 import com.tvibro.base.visible
 
 sealed class SettingItem {
@@ -35,6 +36,20 @@ sealed class SettingItem {
         val summary: String = "",
         val min: Int = 0,
         val max: Int = 999,
+        val get: () -> Int,
+        val set: (Int) -> Unit,
+    ) : SettingItem()
+
+    /**
+     * A shift of hours and minutes kept as one value in minutes, e.g. the EPG offset. A plain
+     * [Number] cannot carry it: a single field in minutes makes an hour a two-digit guess, and one
+     * in hours throws the half away.
+     */
+    data class Offset(
+        override val title: String,
+        val summary: String = "",
+        val min: Int = -720,
+        val max: Int = 720,
         val get: () -> Int,
         val set: (Int) -> Unit,
     ) : SettingItem()
@@ -150,6 +165,11 @@ class SettingsAdapter(
                 holder.value.text = item.get().toString()
                 holder.itemView.setOnClickListener { onAction(item) }
             }
+            is SettingItem.Offset -> {
+                holder.value.visible(true)
+                holder.value.text = Fmt.formatOffsetMinutes(item.get())
+                holder.itemView.setOnClickListener { onAction(item) }
+            }
             is SettingItem.Action -> {
                 holder.itemView.setOnClickListener { onAction(item) }
             }
@@ -171,6 +191,7 @@ class SettingsAdapter(
         is SettingItem.Switch -> summary
         is SettingItem.Choice -> summary
         is SettingItem.Number -> summary
+        is SettingItem.Offset -> summary
         is SettingItem.Action -> summary
         is SettingItem.Value -> summary
         is SettingItem.Header -> ""

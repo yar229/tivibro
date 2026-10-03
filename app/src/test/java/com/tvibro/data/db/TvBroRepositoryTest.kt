@@ -2,6 +2,7 @@ package com.tvibro.data.db
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
+import com.tvibro.data.Prefs
 import com.tvibro.data.model.Channel
 import com.tvibro.data.model.ChannelFilter
 import com.tvibro.data.model.EpgSource
@@ -12,6 +13,7 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -31,6 +33,9 @@ class TvBroRepositoryTest {
     fun setUp() {
         context = ApplicationProvider.getApplicationContext()
         context.deleteDatabase(TvBroDatabase.DB_NAME)
+        // The guide's shift is a setting that outlives a single test, so it starts every one of
+        // them on no shift at all.
+        Prefs.get(context).epgOffsetMinutes = 0
         repo = TvBroRepository(context)
     }
 
@@ -384,5 +389,85 @@ class TvBroRepositoryTest {
     @Test
     fun `restore fails gracefully for a missing file`() {
         assertFalse(repo.restoreFrom(File(context.cacheDir, "absent.zip")))
+    }
+
+    // ------------------------------------------------------------ epg offset
+
+    /**
+     * A programme the guide reads an hour and a half back: its times come out moved, and the window
+     * that finds it is walked on the scale the rows are stored on rather than on the wall clock.
+     */
+    @Test
+    fun `guide times move with the offset`() {
+        val channelId = channelWithProgram("a", "News", start = 1_700_000_000_000L)
+        Prefs.get(context).epgOffsetMinutes = -90
+
+        val shown = repo.programsFor(channelId, 1_700_000_000_000L - 90 * 60_000L - 1_000L, 1_700_000_000_000L + 3600_000L)
+
+        assertEquals(1, shown.size)
+        assertEquals(1_700_000_000_000L - 90 * 60_000L, shown.first().start)
+    }
+
+    /**
+     * A programme moved forward by the offset is not the one on air any more. A query that only
+     * moved what it handed out would still answer with it, which is how a guide ends up promising
+     * something that has been running for two hours.
+     */
+    @Test
+    fun `a programme pushed forward stops being the one on air`() {
+        val stored = 1_700_000_000_000L
+        val channelId = channelWithProgram("a", "News", start = stored)
+        Prefs.get(context).epgOffsetMinutes = 120
+
+        assertNull(repo.currentProgram(channelId, stored + 30 * 60_000L))
+
+        val onAir = repo.currentProgram(channelId, stored + 2 * 3600_000L + 30 * 60_000L)
+        assertEquals("News", onAir?.title)
+        assertEquals(stored + 2 * 3600_000L, onAir?.start)
+    }
+
+    @Test
+    fun `the shift is applied on the way out and never written back`() {
+        val stored = 1_700_000_000_000L
+        val channelId = channelWithProgram("a", "News", start = stored)
+
+        Prefs.get(context).epgOffsetMinutes = 60
+        assertEquals(
+            stored + 3600_000L,
+            repo.programsFor(channelId, stored - 1000L, stored + 2 * 3600_000L).first().start,
+        )
+
+        // Back on no shift the row is what the source reported, so moving the setting costs
+        // nothing and needs no reimport of the guide.
+        Prefs.get(context).epgOffsetMinutes = 0
+        assertEquals(
+            stored,
+            repo.programsFor(channelId, stored - 1000L, stored + 2 * 3600_000L).first().start,
+        )
+    }
+
+    @Test
+    fun `pruning keeps what the guide still shows`() {
+        val stored = 1_700_000_000_000L
+        val channelId = channelWithProgram("a", "News", start = stored)
+        Prefs.get(context).epgOffsetMinutes = 120
+
+        // The row has been over for two hours as far as the guide is concerned, but not on the
+        // scale it is stored on, so a cutoff in wall-clock time must not reach it.
+        repo.clearProgramsBefore(stored + 2 * 3600_000L)
+        assertEquals(1, repo.programsFor(channelId, stored - 1000L, stored + 5 * 3600_000L).size)
+
+        repo.clearProgramsBefore(stored + 4 * 3600_000L)
+        assertTrue(repo.programsFor(channelId, stored - 1000L, stored + 5 * 3600_000L).isEmpty())
+    }
+
+    private fun channelWithProgram(streamId: String, title: String, start: Long): Long {
+        val pid = repo.insertPlaylist(playlist())
+        repo.insertChannels(pid, listOf(channel(streamId)))
+        val id = repo.channels(listOf(pid), "", ChannelFilter.ALL, "manual").first { it.streamId == streamId }.id
+        repo.replacePrograms(listOf(id), listOf(
+            Program(channelId = id, title = title, start = start, stop = start + 3600_000L),
+        ))
+        return id
     }
 }

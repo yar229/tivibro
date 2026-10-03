@@ -398,6 +398,7 @@
     <string name="epg_update_interval">EPG update interval, hours</string>
     <string name="failed_to_load_epg_channels">Failed to load EPG channels</string>
     <string name="epg_offset">EPG time offset, h:min</string>
+    <string name="epg_offset_hint">e.g. 0:00, -1:30, 2:15</string>
     <string name="epg_sources_priority">EPG sources priority</string>
     <string name="epg_sources_hint">EPG sources should be assigned in the playlist settings</string>
     <string name="unassigned_source_hint">This EPG source is not assigned to any playlist. You can assign it in the playlist settings.</string>
