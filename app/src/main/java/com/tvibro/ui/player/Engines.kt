@@ -53,6 +53,44 @@ import java.util.concurrent.Executors
 internal fun tunnelingWanted(enabled: Boolean, sdkInt: Int): Boolean =
     enabled && sdkInt >= Build.VERSION_CODES.M
 
+/**
+ * What the audio track selector is asked to prefer, so that "direct audio passthrough" means
+ * something in Media3.
+ *
+ * There is no switch to turn passthrough on: this version of the library hands the compressed
+ * samples to the TV or amplifier whenever the selected track is a bitstream the sink recognises,
+ * and that is decided by which track gets picked. So the setting has to aim the choice instead of
+ * flipping a flag, and it has to aim it both ways, otherwise turning the option off would leave the
+ * bitstream preferred anyway.
+ *
+ * [softwareAudio] takes the option out of the picture: FFmpeg decodes to PCM and a PCM track has
+ * nothing left to hand over, so asking for a bitstream there would only cost the higher channel
+ * count the decoder was reached for in the first place.
+ */
+internal fun audioMimePreference(passthrough: Boolean, softwareAudio: Boolean): List<String> =
+    if (passthrough && !softwareAudio) BITSTREAM_AUDIO else DECODED_AUDIO
+
+/** Bitstreams a TV or amplifier is expected to decode itself, which is the point of passthrough. */
+private val BITSTREAM_AUDIO = listOf(
+    MimeTypes.AUDIO_AC3,
+    MimeTypes.AUDIO_E_AC3,
+    MimeTypes.AUDIO_TRUEHD,
+    MimeTypes.AUDIO_DTS,
+    MimeTypes.AUDIO_DTS_HD,
+)
+
+/** Formats the box decodes itself, which is the only safe answer when passthrough is not wanted. */
+private val DECODED_AUDIO = listOf(
+    MimeTypes.AUDIO_AAC,
+    MimeTypes.AUDIO_MPEG,
+    MimeTypes.AUDIO_MPEG_L2,
+    MimeTypes.AUDIO_RAW,
+)
+
+/** Whether a format is a bitstream meant for the far end to decode, used for reporting. */
+internal fun isBitstreamAudio(mimeType: String?): Boolean =
+    mimeType != null && BITSTREAM_AUDIO.any { it.equals(mimeType, ignoreCase = true) }
+
 interface PlaybackEngine {
     val surfaceView: View
     fun prepare(url: String, userAgent: String, startPositionMs: Long)
@@ -112,6 +150,11 @@ class ExoEngine(
         // themselves once the tracks it picks say they can. Asking the factory for it, as an older
         // ExoPlayer did, matches nothing on this version.
         setParameters(buildUponParameters().setTunnelingEnabled(tunnelingWanted(tunneled, Build.VERSION.SDK_INT)).build())
+        // Same story as the tunnel, one layer over: there is no passthrough switch in this version
+        // either, so the bitstream is either preferred among the audio tracks or not.
+        setParameters(buildUponParameters().setPreferredAudioMimeTypes(
+            *audioMimePreference(passthrough, softwareAudio).toTypedArray(),
+        ).build())
     }
     // MediaCodec is the hardware audio decoder and FFmpeg is the software one, so the setting only
     // decides which of the two is tried first and neither mode switches the other off: Stalker
@@ -181,8 +224,9 @@ class ExoEngine(
     override val surfaceView: View get() = playerView
 
     var tunneledEnabled = tunnelingWanted(tunneled, Build.VERSION.SDK_INT)
-    var passthroughEnabled = passthrough
+    var passthroughEnabled = passthrough && !softwareAudio
     var hardwareDecoderEnabled = true
+    private val softwareAudioEnabled = softwareAudio
 
     init {
         parent.addView(
@@ -215,6 +259,7 @@ class ExoEngine(
                                 else "туннелирование запрошено, но не вступило в силу",
                             )
                         }
+                        logPassthroughOutcome()
                     }
                     androidx.media3.common.Player.STATE_BUFFERING -> onBuffering?.invoke(true)
                     androidx.media3.common.Player.STATE_ENDED -> {
@@ -260,6 +305,22 @@ class ExoEngine(
         })
     }
 
+    /**
+     * Reports what became of the passthrough request. A bitstream being played is not proof the
+     * audio reached the TV untouched, because whether the sink really hands it over is the device's
+     * own decision, but a decoded format while passthrough was asked for is proof it did not happen
+     * and the stream simply had nothing better to offer.
+     */
+    private fun logPassthroughOutcome() {
+        if (!passthroughEnabled) return
+        val mime = player.audioFormat?.sampleMimeType
+        Log.i(
+            "ExoEngine",
+            if (isBitstreamAudio(mime)) "аудио идёт битстримом ($mime), декодирует ТВ"
+            else "аудио декодируется на устройстве ($mime), передавать нечего",
+        )
+    }
+
     fun enableTunneled(enable: Boolean) {
         tunneledEnabled = tunnelingWanted(enable, Build.VERSION.SDK_INT)
         trackSelector.setParameters(
@@ -278,6 +339,15 @@ class ExoEngine(
 
     fun setPassthrough(enable: Boolean) {
         passthroughEnabled = enable
+        trackSelector.setParameters(
+            trackSelector.buildUponParameters().setPreferredAudioMimeTypes(
+                *audioMimePreference(enable, softwareAudioEnabled).toTypedArray(),
+            ).build()
+        )
+        Log.i(
+            "ExoEngine",
+            "прямая передача аудио ${if (passthroughEnabled) "запрошена" else "выключена"}",
+        )
     }
 
     fun setHardwareDecoder(hardware: Boolean) {
