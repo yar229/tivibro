@@ -516,6 +516,7 @@ class MainActivity : AppCompatActivity() {
     private fun applyHighlighting() {
         guideChannelsAdapter.setHighlightCurrent(prefs.highlightCurrentChannel)
         guideRowsAdapter.setHighlightCurrent(prefs.highlightCurrentPrograms)
+        guideRowsAdapter.setShowPast(prefs.showPastPrograms)
     }
 
     private data class NavButton(val icon: Int, val label: Int, val action: () -> Unit)

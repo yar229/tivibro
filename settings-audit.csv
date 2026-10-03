@@ -97,7 +97,7 @@
 "Внешний вид";"-";"Цветовая тема";"Color theme";"color_theme";"colorTheme";"String";"""dark""";"Тёмная или светлая тема";"Нигде не читается";"Нет UI, не используется"
 "Внешний вид";"-";"Акцентный цвет";"Accent color";"accent_color";"accentColor";"Int";"0xFF3F51B5";"Цвет акцентов";"Нигде не читается";"Нет UI, не используется"
 "Главный экран";"-";"Показывать передачи";"Show programs";"show_programs";"showPrograms";"Boolean";"true";"Отображение передач";"Нигде не читается";"Нет UI, не используется"
-"Главный экран";"-";"Показывать прошедшие передачи";"Show past programs";"show_past";"showPastPrograms";"Boolean";"false";"Отображение прошедших передач";"Нигде не читается";"Нет UI, не используется"
+"Главный экран";"-";"Показывать прошедшие передачи";"Show past programs";"show_past";"showPastPrograms";"Boolean";"false";"Отображение прошедших передач";"GuideRowsAdapter.setShowPast (rowPrograms/visiblePrograms), MainActivity:519";"Используется"
 "Плеер";"-";"Показывать субтитры";"Show subtitles";"show_subs";"showSubtitles";"Boolean";"false";"Включение субтитров";"Нигде не читается";"Нет UI, не используется"
 "Плеер";"-";"Размер субтитров";"Subtitle size";"subs_size";"subtitleSizeSp";"Int";"22";"Кегль субтитров";"Нигде не читается";"Нет UI, не используется"
 "Плеер";"-";"Фон субтитров";"Subtitle background";"subs_bg";"subtitleBackground";"Boolean";"true";"Подложка под субтитрами";"Нигде не читается";"Нет UI, не используется"

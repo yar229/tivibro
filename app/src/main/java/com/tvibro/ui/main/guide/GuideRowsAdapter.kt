@@ -38,6 +38,7 @@ class GuideRowsAdapter(
     private var gridStart = Fmt.startOfDay(System.currentTimeMillis())
     private var loadedDays = INITIAL_DAYS
     private var highlightCurrent = true
+    private var showPast = false
     private var offset = 0
     private var viewport = 0
     private var contentStart = 0
@@ -125,6 +126,20 @@ class GuideRowsAdapter(
     fun setHighlightCurrent(enabled: Boolean) {
         if (highlightCurrent == enabled) return
         highlightCurrent = enabled
+        notifyDataSetChanged()
+    }
+
+    /**
+     * Whether programmes that have already finished stay in the grid. Turning this off takes them
+     * away as they end, which is what a guide read as "what is on" wants; the rows are rebuilt
+     * because a programme is not moved out of a row but dropped from it.
+     */
+    fun setShowPast(enabled: Boolean) {
+        if (showPast == enabled) return
+        showPast = enabled
+        placeholders.clear()
+        clearSelection()
+        focusedCell = null
         notifyDataSetChanged()
     }
 
@@ -265,11 +280,16 @@ class GuideRowsAdapter(
         val channel = channels.getOrNull(channelPosition) ?: return emptyList()
         val stored = programs[channel.id].orEmpty()
         val end = gridStart + loadedDays * DAY_MS
-        val onAxis = stored.any {
+        val visible = visiblePrograms(stored, showPast, System.currentTimeMillis())
+        val onAxis = visible.any {
             it.stop > gridStart && it.start < end &&
                 pixelForTime(it.stop) > 0 && pixelForTime(it.start) < gridWidth
         }
-        if (onAxis) return stored
+        if (onAxis) return visible
+        // A row whose programmes have all ended is left empty rather than handed a stand-in
+        // schedule: the channel does have a guide, the user has asked not to see this part of it,
+        // and a made-up row of placeholders would read as a channel with no EPG at all.
+        if (stored.isNotEmpty() && visible.isEmpty()) return emptyList()
         placeholders[channel.id]?.let { return it }
         val built = ArrayList<Program>(loadedDays * HOURS_IN_DAY / PLACEHOLDER_HOURS)
         var cursor = gridStart
@@ -651,3 +671,17 @@ class GuideRowsAdapter(
         private const val PLACEHOLDER_MS = PLACEHOLDER_HOURS * 3_600_000L
     }
 }
+
+/**
+ * The programmes of a row as the user is meant to see them.
+ *
+ * A programme is judged by when it *ends*: one that is still running at [now] stays, however long
+ * ago it started, and only what has finished is taken away. With [showPast] off a row that has
+ * nothing left comes back empty, which the caller answers with a blank row rather than with the
+ * stand-in schedule of a channel the EPG knows nothing about.
+ */
+internal fun visiblePrograms(
+    programs: List<Program>,
+    showPast: Boolean,
+    now: Long,
+): List<Program> = if (showPast) programs else programs.filter { it.stop > now }

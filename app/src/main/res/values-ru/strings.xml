@@ -456,7 +456,7 @@
     <string name="highlight_current_programs_color">Выделять текущие передачи цветом</string>
     <string name="highlight_progress_only">Выделять только прогресс</string>
     <string name="dim_past_programs">Затемнять прошедшие передачи</string>
-    <string name="show_past_programs">Показывать прошедшие передачи без архива</string>
+    <string name="show_past_programs">Показывать закончившиеся передачи в сетке</string>
     <string name="show_info_at_bottom">Показывать инфо снизу при переключении каналов</string>
     <string name="overlay_mode">Режим поверх видео</string>
     <string name="preview_mode">Режим предпросмотра</string>
