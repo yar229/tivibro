@@ -373,7 +373,6 @@ class SettingsActivity : AppCompatActivity() {
             add(SettingItem.Header(getString(R.string.player_interface)))
             add(switchItem(R.string.show_black_screen) { prefs.showBlackScreen })
             add(switchItem(R.string.show_info_at_bottom) { prefs.infoAtBottom })
-            add(switchItem(R.string.show_description_when_switching_channels_only) { prefs.showDescriptionOnSwitch })
             add(switchItem(R.string.overlay_mode) { prefs.overlayMode })
             add(switchItem(R.string.preview_mode) { prefs.previewMode })
             add(switchItem(R.string.switch_to_pip_on_home) { prefs.switchToPipOnHome })
@@ -659,7 +658,6 @@ class SettingsActivity : AppCompatActivity() {
             R.string.use_external_player -> prefs.useExternalPlayer = value
             R.string.show_black_screen -> prefs.showBlackScreen = value
             R.string.show_info_at_bottom -> prefs.infoAtBottom = value
-            R.string.show_description_when_switching_channels_only -> prefs.showDescriptionOnSwitch = value
             R.string.stay_on_list -> prefs.stayOnList = value
             R.string.stay_on_guide -> prefs.stayOnGuide = value
             R.string.stay_on_search -> prefs.stayOnSearch = value

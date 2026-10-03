@@ -737,7 +737,7 @@ captureFontScale(switchAudioCodec) { prefs.bottomPanelFont }
                 val resumed = resumeRunningStream(ch)
                 if (resumed) clearBuffering.run() else prepareEngine(ch, pl, fromStart)
                 updateOsd()
-                showSwitchPanel(armBuffering = !resumed)
+                showSwitchPanel(armBuffering = !resumed, onChannelSwitch = true)
                 isSwitching = false
             }
         }
@@ -997,8 +997,11 @@ captureFontScale(switchAudioCodec) { prefs.bottomPanelFont }
      * @param armBuffering true only when a real channel switch is under way. Revealing the
      *   panel on its own (remote "info" action, touch tap) must not raise the buffering
      *   indicator, because nothing is loading at that moment.
+     * @param onChannelSwitch true only when the panel comes up on its own because the channel
+     *   changed. That is the one caller the "info at the bottom" setting gets to refuse; asking
+     *   for the panel by hand is a different thing and is always answered.
      */
-    private fun showSwitchPanel(armBuffering: Boolean = true) {
+    private fun showSwitchPanel(armBuffering: Boolean = true, onChannelSwitch: Boolean = false) {
         val ch = channel ?: return
         // The panel stays on screen while the user keeps switching channels, so its content
         // has to be refilled for the new channel even when it is already visible. Only the
@@ -1042,7 +1045,10 @@ captureFontScale(switchAudioCodec) { prefs.bottomPanelFont }
 
         switchNextProgram.visible(false)
 
-        if (prefs.showInfoOnSwitch) {
+        // The setting only has a say on the switch itself: a tap or the remote "info" action asks for
+        // the panel on purpose, so it still gets it. With the setting off the panel is put away
+        // rather than left standing, because its contents belong to the channel just left behind.
+        if (prefs.showInfoOnSwitch && switchPanelAllowed(onChannelSwitch, prefs.infoAtBottom)) {
             switchPanel.visible(true)
             if (alreadyVisible) {
                 resetSwitchTimeout()
@@ -1057,7 +1063,10 @@ captureFontScale(switchAudioCodec) { prefs.bottomPanelFont }
                 switchTimeout = System.currentTimeMillis() + (prefs.displayChangeTimeout * 1000L)
                 if (!sideChannelsVisible) switchPanel.requestFocus()
             }
-            if (prefs.showDescriptionOnSwitch) updateInfoPanel()
+        } else if (onChannelSwitch) {
+            switchPanel.visible(false)
+            switchTimeout = 0
+            switchPanelWaitsForPlayback = false
         }
         if (armBuffering && prefs.showBlackScreen) {
             showMessage(getString(R.string.stream_buffering))
@@ -2062,6 +2071,17 @@ captureFontScale(switchAudioCodec) { prefs.bottomPanelFont }
         const val SIDE_PROGRAM_DEBOUNCE_MS = 250L
     }
 }
+
+/**
+ * Whether the panel is allowed to come up.
+ *
+ * Only the channel switch consults the setting: [onChannelSwitch] marks that case, and there
+ * [infoAtBottom] decides whether the picture keeps the strip at its foot while the channel
+ * settles. A tap or the remote "info" action passes `false` and gets the panel either way, since
+ * the strip is what the user just asked to see.
+ */
+internal fun switchPanelAllowed(onChannelSwitch: Boolean, infoAtBottom: Boolean): Boolean =
+    !onChannelSwitch || infoAtBottom
 
 /** Last known decoded stream properties for a channel, used until the stream reports new ones. */
 class StreamMeta {

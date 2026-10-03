@@ -219,13 +219,10 @@ class Prefs private constructor(context: Context) {
         get() = sp.getBoolean(KEY_INFO_ON_SWITCH, true)
         set(v) = sp.edit { putBoolean(KEY_INFO_ON_SWITCH, v) }
 
+    /** Whether the strip along the bottom of the picture appears when a channel is switched. */
     var infoAtBottom: Boolean
-        get() = sp.getBoolean(KEY_INFO_AT_BOTTOM, false)
+        get() = sp.getBoolean(KEY_INFO_AT_BOTTOM, true)
         set(v) = sp.edit { putBoolean(KEY_INFO_AT_BOTTOM, v) }
-
-    var showDescriptionOnSwitch: Boolean
-        get() = sp.getBoolean(KEY_DESC_ON_SWITCH, false)
-        set(v) = sp.edit { putBoolean(KEY_DESC_ON_SWITCH, v) }
 
     var stayOnList: Boolean
         get() = sp.getBoolean(KEY_STAY_ON_LIST, true)
@@ -586,7 +583,6 @@ class Prefs private constructor(context: Context) {
         const val KEY_BLACK_SCREEN = "black_screen"
         const val KEY_INFO_ON_SWITCH = "info_on_switch"
         const val KEY_INFO_AT_BOTTOM = "info_at_bottom"
-        const val KEY_DESC_ON_SWITCH = "desc_on_switch"
         const val KEY_STAY_ON_LIST = "stay_on_list"
         const val KEY_STAY_ON_GUIDE = "stay_on_guide"
         const val KEY_STAY_ON_SEARCH = "stay_on_search"
