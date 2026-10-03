@@ -41,8 +41,17 @@ import org.videolan.libvlc.LibVLC
 import org.videolan.libvlc.Media
 import org.videolan.libvlc.MediaPlayer
 import org.videolan.libvlc.interfaces.IMedia
+import android.os.Build
 import org.videolan.libvlc.interfaces.IVLCVout
 import java.util.concurrent.Executors
+
+/**
+ * Whether tunnelling may be asked for at all. The tunnel is built on MediaCodec frame callbacks,
+ * which arrived in Marshmallow, so below that there is nothing to tunnel into and the request would
+ * only be refused later, at the moment the tracks are picked.
+ */
+internal fun tunnelingWanted(enabled: Boolean, sdkInt: Int): Boolean =
+    enabled && sdkInt >= Build.VERSION_CODES.M
 
 interface PlaybackEngine {
     val surfaceView: View
@@ -57,21 +66,22 @@ interface PlaybackEngine {
     fun aspectMode(): Int
     fun cyclesAspectMode()
     fun aspectModeLabel(context: Context): String
-fun videoSize(): Pair<Int, Int>?
-      /**
-       * Size of the picture as it is actually drawn, in the surface view's own pixels. An engine
-       * letterboxes a frame that does not match the screen, so this is normally smaller than the
-       * view: a gesture that drags the picture has to stop at these edges rather than at the edges
-       * of the view, or the frame would slide off the screen and uncover what is behind it.
-       */
-      fun contentSize(): Pair<Float, Float>? = null
+    fun videoSize(): Pair<Int, Int>?
 
-      /**
-       * The surface the picture is decoded into, when the engine has one. A SurfaceView owns a
-       * Surface, a TextureView draws through its own texture and owns none, so this is null for VLC
-       * and whoever needs the surface has to fall back on the window.
-       */
-      fun frameRateSurface(): Surface? = null
+    /**
+     * Size of the picture as it is actually drawn, in the surface view's own pixels. An engine
+     * letterboxes a frame that does not match the screen, so this is normally smaller than the
+     * view: a gesture that drags the picture has to stop at these edges rather than at the edges
+     * of the view, or the frame would slide off the screen and uncover what is behind it.
+     */
+    fun contentSize(): Pair<Float, Float>? = null
+
+    /**
+     * The surface the picture is decoded into, when the engine has one. A SurfaceView owns a
+     * Surface, a TextureView draws through its own texture and owns none, so this is null for VLC
+     * and whoever needs the surface has to fall back on the window.
+     */
+    fun frameRateSurface(): Surface? = null
     fun videoFps(): Float?
     fun audioChannels(): Int?
     fun videoCodecLabel(): String? = null
@@ -96,7 +106,13 @@ class ExoEngine(
 ) : PlaybackEngine {
 
     private val appContext = context.applicationContext
-    private val trackSelector = DefaultTrackSelector(appContext)
+    private val trackSelector = DefaultTrackSelector(appContext).apply {
+        // Media3 keeps tunnelling out of the renderers factory: the setting belongs to the track
+        // selector, and MediaCodecAudioRenderer and MediaCodecVideoRenderer move into the tunnel
+        // themselves once the tracks it picks say they can. Asking the factory for it, as an older
+        // ExoPlayer did, matches nothing on this version.
+        setParameters(buildUponParameters().setTunnelingEnabled(tunnelingWanted(tunneled, Build.VERSION.SDK_INT)).build())
+    }
     // MediaCodec is the hardware audio decoder and FFmpeg is the software one, so the setting only
     // decides which of the two is tried first and neither mode switches the other off: Stalker
     // portals hand out MPEG audio layer 2 streams that no platform decoder on these boxes can
@@ -164,7 +180,7 @@ class ExoEngine(
 
     override val surfaceView: View get() = playerView
 
-    var tunneledEnabled = tunneled
+    var tunneledEnabled = tunnelingWanted(tunneled, Build.VERSION.SDK_INT)
     var passthroughEnabled = passthrough
     var hardwareDecoderEnabled = true
 
@@ -190,6 +206,15 @@ class ExoEngine(
                         onBuffering?.invoke(false)
                         onReady?.invoke()
                         maybeScheduleSps()
+                        // Asking for the tunnel and getting it are two different things, and only
+                        // the device knows which happened, so the outcome is logged on every start.
+                        if (tunneledEnabled) {
+                            Log.i(
+                                "ExoEngine",
+                                if (isTunnelingActive()) "туннелирование включено"
+                                else "туннелирование запрошено, но не вступило в силу",
+                            )
+                        }
                     }
                     androidx.media3.common.Player.STATE_BUFFERING -> onBuffering?.invoke(true)
                     androidx.media3.common.Player.STATE_ENDED -> {
@@ -236,8 +261,20 @@ class ExoEngine(
     }
 
     fun enableTunneled(enable: Boolean) {
-        tunneledEnabled = enable
+        tunneledEnabled = tunnelingWanted(enable, Build.VERSION.SDK_INT)
+        trackSelector.setParameters(
+            trackSelector.buildUponParameters().setTunnelingEnabled(tunneledEnabled).build()
+        )
+        Log.i("ExoEngine", "туннелирование ${if (tunneledEnabled) "запрошено" else "выключено"}")
     }
+
+    /**
+     * Whether the pipeline is really in the tunnel, which is not the same as having asked for it:
+     * a decoder that cannot tunnel, an FFmpeg audio renderer or a passthrough track all make the
+     * request unmeetable, and the selector then quietly plays without it. Only ExoPlayer knows,
+     * because only it sees which renderers ended up sharing the buffer.
+     */
+    fun isTunnelingActive(): Boolean = tunneledEnabled && player.isTunnelingEnabled
 
     fun setPassthrough(enable: Boolean) {
         passthroughEnabled = enable
