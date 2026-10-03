@@ -516,6 +516,7 @@ class MainActivity : AppCompatActivity() {
     private fun applyHighlighting() {
         guideChannelsAdapter.setHighlightCurrent(prefs.highlightCurrentChannel)
         guideRowsAdapter.setHighlightCurrent(prefs.highlightCurrentPrograms)
+        guideRowsAdapter.setDimPast(prefs.dimPastPrograms)
         guideRowsAdapter.setShowPast(prefs.showPastPrograms)
     }
 

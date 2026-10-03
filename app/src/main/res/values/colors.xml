@@ -55,6 +55,10 @@
          focus_frame, so "on now" cannot be mistaken for the crosshair or the pick -->
     <color name="epg_now_fill">#4D3B5998</color>
     <color name="epg_now_frame">#FF1565C0</color>
+    <!-- A finished programme: the cell sinks under a dark scrim instead of rising under a light
+         one, so the same pair of tokens works for the day and the night palette -->
+    <color name="epg_past_fill">#14000000</color>
+    <color name="epg_past_frame">#80C3CBD8</color>
 
     <!-- Translucent layers that used to be written as literal hex in their drawables -->
     <color name="row_overlay">#0A000000</color>
