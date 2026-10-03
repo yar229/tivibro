@@ -477,7 +477,7 @@
     <string name="highlight_current_programs_color">Highlight current programs in color</string>
     <string name="highlight_progress_only">Highlight progress only</string>
     <string name="dim_past_programs">Dim past programs</string>
-    <string name="show_past_programs">Show past programs without catch-up</string>
+    <string name="show_past_programs">Show finished programmes in the guide</string>
     <string name="show_info_at_bottom">Show info panel at the bottom when switching channels</string>
     <string name="overlay_mode">Overlay mode</string>
     <string name="preview_mode">Preview mode</string>

@@ -438,6 +438,7 @@ class SettingsActivity : AppCompatActivity() {
             add(switchItem(R.string.highlight_current_programs) { prefs.highlightCurrentPrograms })
             add(switchItem(R.string.highlight_progress_only) { prefs.highlightProgressOnly })
             add(switchItem(R.string.dim_past_programs) { prefs.dimPastPrograms })
+            add(switchItem(R.string.show_past_programs) { prefs.showPastPrograms })
             add(switchItem(R.string.show_current_time_indicator) { prefs.showCurrentTimeIndicator })
             add(SettingItem.Header(getString(R.string.navigation)))
             add(switchItem(R.string.stay_on_list) { prefs.stayOnList })
@@ -649,6 +650,7 @@ class SettingsActivity : AppCompatActivity() {
             R.string.highlight_current_programs -> prefs.highlightCurrentPrograms = value
             R.string.highlight_progress_only -> prefs.highlightProgressOnly = value
             R.string.dim_past_programs -> prefs.dimPastPrograms = value
+            R.string.show_past_programs -> prefs.showPastPrograms = value
             R.string.show_current_time_indicator -> prefs.showCurrentTimeIndicator = value
             R.string.auto_frame_rate -> prefs.autoFrameRate = value
             R.string.tunneled_playback -> prefs.tunneledPlayback = value
