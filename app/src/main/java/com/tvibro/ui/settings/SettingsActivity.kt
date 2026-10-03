@@ -504,7 +504,7 @@ class SettingsActivity : AppCompatActivity() {
                 get = { prefs.pastDaysToKeep },
                 set = { prefs.pastDaysToKeep = it },
             ))
-            add(switchItem(R.string.store_descriptions) { prefs.storeDescriptions })
+            add(switchItem(R.string.store_descriptions, R.string.store_descriptions_hint) { prefs.storeDescriptions })
             add(switchItem(R.string.full_scan, R.string.full_scan_hint) { prefs.epgFullScan })
             add(
                 switchItem(R.string.epg_auto_update, R.string.epg_auto_update_hint) {

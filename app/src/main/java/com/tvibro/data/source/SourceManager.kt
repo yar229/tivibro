@@ -174,7 +174,7 @@ class SourceManager(context: Context) {
                 ).use { input ->
                     val filled = HashSet<Long>()
                     XmltvParser(
-                        storeDescriptions = true,
+                        storeDescriptions = TvBroApp.prefs(appContext).storeDescriptions,
                         acceptChannel = { key -> byId.containsKey(key) || byName.containsKey(key) },
                         onProgramme = { p ->
                             val key = p.tvgId.trim().lowercase(Locale.US)
